@@ -1,0 +1,91 @@
+{
+  "project_info": {
+    "project_number": "185848472146",
+    "firebase_url": "https://mubarok-tester-default-rtdb.firebaseio.com",
+    "project_id": "mubarok-tester",
+    "storage_bucket": "mubarok-tester.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:185848472146:android:f6406cdea0f760bfa9f58b",
+        "android_client_info": {
+          "package_name": "com.example.service_hub_app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "185848472146-o93gf0itpvs5a7bq0p203cejv84ri762.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.service_hub_app",
+            "certificate_hash": "ebf9a28c371874c7e0796bb8ca7c7e3142e8c155"
+          }
+        },
+        {
+          "client_id": "185848472146-3aj42olro2ut8qvommri96au0s8ud5sn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "REMOVED_SECRET"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "185848472146-3aj42olro2ut8qvommri96au0s8ud5sn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "185848472146-d4dehejrun2cg1jl3hqgkic824nrq5sc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mubarok.tester"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:185848472146:android:500072c4fa8e25f4a9f58b",
+        "android_client_info": {
+          "package_name": "com.mubarok.tester"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "185848472146-3aj42olro2ut8qvommri96au0s8ud5sn.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "REMOVED_SECRET"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "185848472146-3aj42olro2ut8qvommri96au0s8ud5sn.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "185848472146-d4dehejrun2cg1jl3hqgkic824nrq5sc.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.mubarok.tester"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

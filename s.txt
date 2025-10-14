@@ -1,0 +1,49 @@
+notify if event is canceled , 
+
+add pop ups 
+
+option to report a post 
+
+on signup , user must enter pgone and email so we can send them sms or email reminders fro their events
+
+user under events can turn off notifications , or increase notification interval
+
+expired anouncemtns are grey in text
+
+app analyzes the amount of promotoions being presented at once and if there is a high promontion demand price for boost increase ,to a certain fee per day that the announcement is up , 
+
+when applying to have anouncemnt boosted you get the offer that users will receive email notice about your event , you pay more , you get sms notice
+
+users have to consent when signing up to receive messages
+
+when clicking attend , user is offered option for reminder through sms or email , 
+will have a confirm screen ( confirm or cancel ) with checkbox notify mosque im attending
+_____________________
+sign in user . organization
+
+regular users could receive invitations from mosque organizations to become organizaors/admins , and whne remoced they go back to ebing normal members
+
+
+
+
+
+
+
+option for me:
+filter organization by category , default category
+
+show me nearest , 
+
+each announcemtn has category feild that only i can add
+
+each announcemtn or even organization can be reported to support
+
+each organization has an option to request app adjustments under the my orgaznaition section
+
+
+
+
+
+when signing up as organization , provide legal proof and provide name of direct contact their 
+
+then under members organization can add any member

@@ -1,0 +1,79 @@
+<svg width="280" height="200" viewBox="0 0 280 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg3" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90A4;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#2E5266;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="book" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#F5F5DC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E6E6FA;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="pages" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFAF0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#F0F8FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="280" height="200" fill="url(#bg3)"/>
+  
+  <!-- Soft light rays -->
+  <ellipse cx="140" cy="50" rx="80" ry="30" fill="rgba(255,255,255,0.1)"/>
+  <ellipse cx="140" cy="60" rx="60" ry="20" fill="rgba(255,255,255,0.05)"/>
+  
+  <!-- Open Quran Book -->
+  <ellipse cx="140" cy="130" rx="70" ry="40" fill="rgba(0,0,0,0.2)"/>
+  
+  <!-- Book Cover/Binding -->
+  <rect x="135" y="90" width="10" height="80" fill="url(#book)" rx="2"/>
+  
+  <!-- Left Page -->
+  <path d="M70 90 C70 85, 75 80, 80 80 L135 80 L135 170 L80 170 C75 170, 70 165, 70 160 Z" fill="url(#pages)" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  
+  <!-- Right Page -->
+  <path d="M145 80 L200 80 C205 80, 210 85, 210 90 L210 160 C210 165, 205 170, 200 170 L145 170 Z" fill="url(#pages)" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  
+  <!-- Arabic Text Lines (Left Page) -->
+  <line x1="80" y1="95" x2="125" y2="95" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="105" x2="120" y2="105" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="115" x2="125" y2="115" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="125" x2="115" y2="125" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="135" x2="125" y2="135" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="145" x2="120" y2="145" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="80" y1="155" x2="125" y2="155" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  
+  <!-- Arabic Text Lines (Right Page) -->
+  <line x1="155" y1="95" x2="200" y2="95" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="160" y1="105" x2="200" y2="105" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="155" y1="115" x2="200" y2="115" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="165" y1="125" x2="200" y2="125" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="155" y1="135" x2="200" y2="135" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="160" y1="145" x2="200" y2="145" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  <line x1="155" y1="155" x2="200" y2="155" stroke="rgba(0,100,0,0.6)" stroke-width="2"/>
+  
+  <!-- Decorative Islamic Border -->
+  <rect x="75" y="85" width="55" height="90" fill="none" stroke="rgba(218,165,32,0.4)" stroke-width="1"/>
+  <rect x="150" y="85" width="55" height="90" fill="none" stroke="rgba(218,165,32,0.4)" stroke-width="1"/>
+  
+  <!-- Prayer Beads (Tasbih) -->
+  <ellipse cx="220" cy="110" rx="15" ry="25" fill="none" stroke="rgba(139,69,19,0.6)" stroke-width="2"/>
+  <circle cx="215" cy="95" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="220" cy="90" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="225" cy="95" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="230" cy="105" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="230" cy="115" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="225" cy="125" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="220" cy="130" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="215" cy="125" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="210" cy="115" r="3" fill="rgba(160,82,45,0.8)"/>
+  <circle cx="210" cy="105" r="3" fill="rgba(160,82,45,0.8)"/>
+  
+  <!-- Reading Glass -->
+  <circle cx="60" cy="120" r="20" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+  <circle cx="60" cy="120" r="15" fill="rgba(255,255,255,0.1)"/>
+  <line x1="75" y1="135" x2="85" y2="145" stroke="rgba(139,69,19,0.8)" stroke-width="3"/>
+  
+  <!-- Bookmark -->
+  <rect x="140" y="70" width="8" height="30" fill="rgba(220,20,60,0.7)"/>
+  <path d="M140 70 L144 75 L148 70 Z" fill="rgba(220,20,60,0.7)"/>
+</svg>
