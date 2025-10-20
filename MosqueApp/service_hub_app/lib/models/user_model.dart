@@ -43,7 +43,7 @@ class UserModel {
       phone: data['phone'] ?? '',
       name: data['name'] ?? '',
       userType: UserType.values.firstWhere(
-        (e) => e.toString() == 'UserType.${data['userType']}',
+        (e) => e.toString().split('.').last.toLowerCase() == (data['userType'] ?? 'regular').toString().toLowerCase(),
         orElse: () => UserType.regular,
       ),
       emailNotifications: data['emailNotifications'] ?? true,

@@ -35,7 +35,7 @@ class NotificationService {
   }) async {
     try {
       final message = Message()
-        ..from = Address(AppConfig.smtpUsername, 'Service Hub App')
+        ..from = Address(AppConfig.smtpUsername, 'UmmaHub App')
         ..recipients.add(to)
         ..subject = subject;
 
@@ -82,8 +82,10 @@ class NotificationService {
     bool sendEmail = false,
     bool sendSMS = false,
   }) async {
-    final eventDateStr = '${eventDateTime.day}/${eventDateTime.month}/${eventDateTime.year}';
-    final eventTimeStr = '${eventDateTime.hour}:${eventDateTime.minute.toString().padLeft(2, '0')}';
+    final eventDateStr =
+        '${eventDateTime.day}/${eventDateTime.month}/${eventDateTime.year}';
+    final eventTimeStr =
+        '${eventDateTime.hour}:${eventDateTime.minute.toString().padLeft(2, '0')}';
 
     if (sendEmail) {
       final emailSubject = 'Event Reminder: $eventTitle';
@@ -100,7 +102,7 @@ Time: $eventTimeStr
 Don't forget to attend!
 
 Best regards,
-Service Hub Team
+UmmaHub Team
       ''';
 
       await sendEmailNotification(
@@ -111,8 +113,9 @@ Service Hub Team
     }
 
     if (sendSMS) {
-      final smsMessage = 'Reminder: $eventTitle by $organizationName on $eventDateStr at $eventTimeStr. Don\'t miss it!';
-      
+      final smsMessage =
+          'Reminder: $eventTitle by $organizationName on $eventDateStr at $eventTimeStr. Don\'t miss it!';
+
       await sendSMSNotification(
         to: userPhone,
         message: smsMessage,
@@ -142,7 +145,7 @@ Organization: $organizationName
 Check the app for more details.
 
 Best regards,
-Service Hub Team
+UmmaHub Team
       ''';
 
       await sendEmailNotification(
@@ -153,8 +156,9 @@ Service Hub Team
     }
 
     if (sendSMS) {
-      final smsMessage = 'New announcement: $announcementTitle by $organizationName. Check the app for details.';
-      
+      final smsMessage =
+          'New announcement: $announcementTitle by $organizationName. Check the app for details.';
+
       await sendSMSNotification(
         to: userPhone,
         message: smsMessage,
@@ -184,7 +188,7 @@ Organization: $organizationName
 We apologize for any inconvenience caused.
 
 Best regards,
-Service Hub Team
+UmmaHub Team
       ''';
 
       await sendEmailNotification(
@@ -195,8 +199,9 @@ Service Hub Team
     }
 
     if (sendSMS) {
-      final smsMessage = 'Event Cancelled: $eventTitle by $organizationName. Sorry for the inconvenience.';
-      
+      final smsMessage =
+          'Event Cancelled: $eventTitle by $organizationName. Sorry for the inconvenience.';
+
       await sendSMSNotification(
         to: userPhone,
         message: smsMessage,
@@ -223,7 +228,7 @@ You have been invited to join $organizationName as a $role.
 Please check the app to accept or decline this invitation.
 
 Best regards,
-Service Hub Team
+UmmaHub Team
       ''';
 
       await sendEmailNotification(
@@ -234,8 +239,9 @@ Service Hub Team
     }
 
     if (sendSMS) {
-      final smsMessage = 'You\'ve been invited to join $organizationName as a $role. Check the app to respond.';
-      
+      final smsMessage =
+          'You\'ve been invited to join $organizationName as a $role. Check the app to respond.';
+
       await sendSMSNotification(
         to: userPhone,
         message: smsMessage,

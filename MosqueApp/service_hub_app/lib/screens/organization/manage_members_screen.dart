@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
 
@@ -16,72 +17,132 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
   final TextEditingController _searchController = TextEditingController();
   String _selectedRole = 'All';
   String _searchQuery = '';
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _members = [];
+  String? _currentUserEmail;
+  Map<String, dynamic>? _organizationData;
 
-  final List<String> _roles = ['All', 'Admin', 'Moderator', 'Member', 'Pending'];
-
-  // Sample member data
-  final List<Map<String, dynamic>> _members = [
-    {
-      'id': '1',
-      'name': 'Ahmad Rahman',
-      'email': 'ahmad.rahman@email.com',
-      'role': 'Admin',
-      'joinDate': '2023-01-15',
-      'status': 'Active',
-      'avatar': 'A',
-      'phone': '+62 812-3456-7890',
-      'lastActive': '2 hours ago',
-    },
-    {
-      'id': '2',
-      'name': 'Fatimah Zahra',
-      'email': 'fatimah.zahra@email.com',
-      'role': 'Moderator',
-      'joinDate': '2023-02-20',
-      'status': 'Active',
-      'avatar': 'F',
-      'phone': '+62 813-4567-8901',
-      'lastActive': '1 day ago',
-    },
-    {
-      'id': '3',
-      'name': 'Muhammad Ali',
-      'email': 'muhammad.ali@email.com',
-      'role': 'Member',
-      'joinDate': '2023-03-10',
-      'status': 'Active',
-      'avatar': 'M',
-      'phone': '+62 814-5678-9012',
-      'lastActive': '3 days ago',
-    },
-    {
-      'id': '4',
-      'name': 'Khadijah Binti Omar',
-      'email': 'khadijah.omar@email.com',
-      'role': 'Member',
-      'joinDate': '2023-04-05',
-      'status': 'Inactive',
-      'avatar': 'K',
-      'phone': '+62 815-6789-0123',
-      'lastActive': '1 week ago',
-    },
-    {
-      'id': '5',
-      'name': 'Usman Ibn Affan',
-      'email': 'usman.affan@email.com',
-      'role': 'Pending',
-      'joinDate': '2023-12-01',
-      'status': 'Pending',
-      'avatar': 'U',
-      'phone': '+62 816-7890-1234',
-      'lastActive': 'Never',
-    },
+  final List<String> _roles = [
+    'All',
+    'Admin',
+    'Moderator',
+    'Member',
+    'Pending'
   ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _initializeData();
+  }
+
+  Future<void> _initializeData() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    _currentUserEmail = authProvider.firebaseUser?.email;
+
+    if (_currentUserEmail != null) {
+      await _fetchOrganizationData();
+      await _fetchMembers();
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _fetchOrganizationData() async {
+    try {
+      print('=== DEBUG: Fetching Organization Data ===');
+      print('Current user email: $_currentUserEmail');
+
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('mosqueapp_organizations')
+          .where('userDetails.email', isEqualTo: _currentUserEmail)
+          .limit(1)
+          .get();
+
+      print('=== DEBUG: Organization Query Results ===');
+      print(
+          'Number of organization documents found: ${querySnapshot.docs.length}');
+
+      if (querySnapshot.docs.isNotEmpty) {
+        _organizationData = querySnapshot.docs.first.data();
+        print('Organization data found: $_organizationData');
+      } else {
+        print('No organization data found for email: $_currentUserEmail');
+      }
+    } catch (e) {
+      print('Error fetching organization data: $e');
+    }
+  }
+
+  Future<void> _fetchMembers() async {
+    if (_organizationData == null) return;
+
+    try {
+      final mosqueName = _organizationData!['organizationName'];
+      final mosqueAddress = _organizationData!['address'];
+
+      print('=== DEBUG: Fetching Members ===');
+      print('Mosque Name: $mosqueName');
+      print('Mosque Address: $mosqueAddress');
+
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('mosqueapp_subscribe_mosques')
+          .where('mosqueName', isEqualTo: mosqueName)
+          .where('mosqueAddress', isEqualTo: mosqueAddress)
+          .get();
+
+      print('=== DEBUG: Query Results ===');
+      print('Number of documents found: ${querySnapshot.docs.length}');
+
+      List<Map<String, dynamic>> members = [];
+
+      for (var doc in querySnapshot.docs) {
+        final data = doc.data();
+        print('Document ID: ${doc.id}');
+        print('Document data: $data');
+
+        // Setiap dokumen adalah satu subscriber/member
+        // Bukan array memberIds, tapi setiap doc adalah member individual
+        if (data['userName'] != null) {
+          final memberData = {
+            'id': doc.id,
+            'name': data['userName'] ?? 'Unknown',
+            'email': data['userEmail'] ?? 'No email',
+            'role': data['role'] ?? 'Member',
+            'joinDate': data['subscribedAt'] != null
+                ? (data['subscribedAt'] as Timestamp)
+                    .toDate()
+                    .toString()
+                    .substring(0, 10)
+                : DateTime.now().toString().substring(0, 10),
+            'status': data['isActive'] == true ? 'Active' : 'Inactive',
+            'avatar': (data['userName'] ?? 'U')
+                .toString()
+                .substring(0, 1)
+                .toUpperCase(),
+            'phone': data['phone'] ?? 'No phone',
+            'lastActive': data['lastActive'] ?? 'Unknown',
+          };
+          members.add(memberData);
+          print('Added member: $memberData');
+        } else {
+          print('Skipped document without userName: $data');
+        }
+      }
+
+      print('=== DEBUG: Final Results ===');
+      print('Total members processed: ${members.length}');
+      print('Members list: $members');
+
+      setState(() {
+        _members = members;
+      });
+    } catch (e) {
+      print('Error fetching members: $e');
+    }
   }
 
   @override
@@ -308,13 +369,15 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
                       });
                     },
                     backgroundColor: Colors.white,
-                    selectedColor: Color(AppConfig.primaryTealColor).withOpacity(0.2),
+                    selectedColor:
+                        Color(AppConfig.primaryTealColor).withOpacity(0.2),
                     checkmarkColor: Color(AppConfig.primaryTealColor),
                     labelStyle: TextStyle(
                       color: isSelected
                           ? Color(AppConfig.primaryTealColor)
                           : Colors.grey[700],
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(20),
@@ -418,6 +481,29 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
   }
 
   Widget _buildMembersTab() {
+    if (_isLoading) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(
+                Color(AppConfig.primaryTealColor),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Loading members...',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final filteredMembers = _filteredMembers;
 
     if (filteredMembers.isEmpty) {
@@ -560,7 +646,7 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          member['lastActive'],
+                          member['joinDate'],
                           style: TextStyle(
                             fontSize: 12,
                             color: Colors.grey[500],
@@ -801,7 +887,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(AppConfig.primaryTealColor),
             ),
-            child: const Text('Send Invite', style: TextStyle(color: Colors.white)),
+            child: const Text('Send Invite',
+                style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -832,7 +919,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
               onTap: () {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Bulk invite feature coming soon')),
+                  const SnackBar(
+                      content: Text('Bulk invite feature coming soon')),
                 );
               },
             ),
@@ -908,7 +996,8 @@ class _ManageMembersScreenState extends State<ManageMembersScreen>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Member'),
-        content: Text('Are you sure you want to remove ${member['name']} from the organization?'),
+        content: Text(
+            'Are you sure you want to remove ${member['name']} from the organization?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),

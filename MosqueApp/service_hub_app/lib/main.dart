@@ -38,8 +38,12 @@ void main() async {
     options: FirebaseConfig.currentPlatform,
   );
 
-  // Initialize local notifications
-  await LocalNotificationService().initialize();
+  // Initialize local/remote notifications (don't block app if it fails)
+  try {
+    await LocalNotificationService().initialize();
+  } catch (e) {
+    debugPrint('LocalNotificationService init error: $e');
+  }
 
   runApp(const ServiceHubApp());
 }

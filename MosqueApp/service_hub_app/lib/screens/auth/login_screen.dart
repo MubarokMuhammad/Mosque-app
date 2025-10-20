@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
 import '../home/home_screen.dart';
@@ -30,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     bool success = await authProvider.signIn(
       email: _emailController.text.trim(),
       password: _passwordController.text,
@@ -52,7 +53,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleGoogleSignIn() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
+    // Clear any cached Google session so the account chooser appears
+    try {
+      final googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+      await googleSignIn.disconnect();
+    } catch (_) {}
+
     bool success = await authProvider.signInWithGoogle();
 
     if (success && mounted) {
@@ -71,7 +79,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -80,7 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleAppleSignIn() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     bool success = await authProvider.signInWithApple();
 
     if (success && mounted) {
@@ -99,7 +108,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -243,9 +253,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey.shade200, width: 1),
+                        border:
+                            Border.all(color: Colors.grey.shade200, width: 1),
                       ),
-                      child: Icon(Icons.g_mobiledata, size: 16, color: Colors.red),
+                      child:
+                          Icon(Icons.g_mobiledata, size: 16, color: Colors.red),
                     ),
                   ),
                   Positioned(
@@ -256,7 +268,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey.shade200, width: 1),
+                        border:
+                            Border.all(color: Colors.grey.shade200, width: 1),
                       ),
                       child: Icon(Icons.apple, size: 16, color: Colors.black),
                     ),
@@ -295,7 +308,7 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 40),
-              
+
               // Logo and Title
               Column(
                 children: [
@@ -307,7 +320,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: Color(AppConfig.primaryTealColor).withOpacity(0.3),
+                          color: Color(AppConfig.primaryTealColor)
+                              .withOpacity(0.3),
                           blurRadius: 15,
                           offset: const Offset(0, 8),
                         ),
@@ -319,9 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Colors.white,
                     ),
                   ),
-                  
                   const SizedBox(height: 16),
-                  
                   Text(
                     'Welcome Back',
                     style: TextStyle(
@@ -330,9 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       color: Color(AppConfig.primaryTealColor),
                     ),
                   ),
-                  
                   const SizedBox(height: 6),
-                  
                   Text(
                     'Sign in to continue to ${AppConfig.appName}',
                     style: TextStyle(
@@ -342,9 +352,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // Login Form
               Form(
                 key: _formKey,
@@ -356,38 +366,45 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined, color: Color(AppConfig.primaryTealColor)),
+                        prefixIcon: Icon(Icons.email_outlined,
+                            color: Color(AppConfig.primaryTealColor)),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Color(AppConfig.primaryTealColor), width: 2),
+                          borderSide: BorderSide(
+                              color: Color(AppConfig.primaryTealColor),
+                              width: 2),
                         ),
                       ),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return 'Please enter your email';
                         }
-                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$')
+                            .hasMatch(value)) {
                           return 'Please enter a valid email';
                         }
                         return null;
                       },
                     ),
-                    
+
                     const SizedBox(height: 16),
-                    
+
                     // Password Field
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
                       decoration: InputDecoration(
                         labelText: 'Password',
-                        prefixIcon: Icon(Icons.lock_outline, color: Color(AppConfig.primaryTealColor)),
+                        prefixIcon: Icon(Icons.lock_outline,
+                            color: Color(AppConfig.primaryTealColor)),
                         suffixIcon: IconButton(
                           icon: Icon(
-                            _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                            _obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off,
                             color: Color(AppConfig.primaryTealColor),
                           ),
                           onPressed: () {
@@ -401,7 +418,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Color(AppConfig.primaryTealColor), width: 2),
+                          borderSide: BorderSide(
+                              color: Color(AppConfig.primaryTealColor),
+                              width: 2),
                         ),
                       ),
                       validator: (value) {
@@ -414,9 +433,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         return null;
                       },
                     ),
-                    
+
                     const SizedBox(height: 12),
-                    
+
                     // Forgot Password
                     Align(
                       alignment: Alignment.centerRight,
@@ -424,19 +443,21 @@ class _LoginScreenState extends State<LoginScreen> {
                         onPressed: () {
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (context) => const ForgotPasswordScreen(),
+                              builder: (context) =>
+                                  const ForgotPasswordScreen(),
                             ),
                           );
                         },
                         child: Text(
                           'Forgot Password?',
-                          style: TextStyle(color: Color(AppConfig.primaryTealColor)),
+                          style: TextStyle(
+                              color: Color(AppConfig.primaryTealColor)),
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 24),
-                    
+
                     // Login Button
                     Consumer<AuthProvider>(
                       builder: (context, authProvider, child) {
@@ -446,7 +467,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: ElevatedButton(
                             onPressed: authProvider.isLoading ? null : _login,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Color(AppConfig.primaryTealColor),
+                              backgroundColor:
+                                  Color(AppConfig.primaryTealColor),
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -459,7 +481,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
                                     ),
                                   )
                                 : const Text(
@@ -476,9 +499,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 32),
-              
+
               // Sign Up Link
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -506,9 +529,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Divider dengan "OR"
               Row(
                 children: [
@@ -536,12 +559,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 16),
-              
+
               // Social Sign In Button
               _buildSocialSignInButton(),
-              
+
               const SizedBox(height: 16),
             ],
           ),

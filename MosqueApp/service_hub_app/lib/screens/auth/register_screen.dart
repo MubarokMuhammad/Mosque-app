@@ -91,7 +91,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       password: _passwordController.text,
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
-      userType: _selectedUserType,
+      userType: UserType.regular,
     );
 
     if (success && mounted) {
@@ -120,7 +120,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   Future<void> _handleGoogleSignUp() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     bool success = await authProvider.signInWithGoogle();
 
     if (success && mounted) {
@@ -139,7 +139,8 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -148,7 +149,7 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   Future<void> _handleAppleSignUp() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     bool success = await authProvider.signInWithApple();
 
     if (success && mounted) {
@@ -167,7 +168,8 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           margin: const EdgeInsets.all(16),
         ),
       );
@@ -311,9 +313,11 @@ class _RegisterScreenState extends State<RegisterScreen>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey.shade200, width: 1),
+                        border:
+                            Border.all(color: Colors.grey.shade200, width: 1),
                       ),
-                      child: Icon(Icons.g_mobiledata, size: 16, color: Colors.red),
+                      child:
+                          Icon(Icons.g_mobiledata, size: 16, color: Colors.red),
                     ),
                   ),
                   Positioned(
@@ -324,7 +328,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                       decoration: BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.grey.shade200, width: 1),
+                        border:
+                            Border.all(color: Colors.grey.shade200, width: 1),
                       ),
                       child: Icon(Icons.apple, size: 16, color: Colors.black),
                     ),
@@ -598,69 +603,8 @@ class _RegisterScreenState extends State<RegisterScreen>
 
                   const SizedBox(height: 40),
 
-                  // User Type Selection
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.grey.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Color(AppConfig.primaryTealColor)
-                                    .withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                Icons.account_circle,
-                                color: Color(AppConfig.primaryTealColor),
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Choose Account Type',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.grey[800],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        _buildUserTypeCard(
-                          userType: UserType.regular,
-                          title: 'Regular User',
-                          subtitle:
-                              'Join events, receive announcements, and connect with community',
-                          icon: Icons.person,
-                        ),
-                        _buildUserTypeCard(
-                          userType: UserType.organization,
-                          title: 'Organization',
-                          subtitle:
-                              'Create events, manage announcements, and organize activities',
-                          icon: Icons.business,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
+                  // User Type Selection removed per requirement; all users start as Regular
+                  const SizedBox(height: 16),
 
                   // Registration Form
                   Container(
@@ -710,12 +654,8 @@ class _RegisterScreenState extends State<RegisterScreen>
                           const SizedBox(height: 24),
                           _buildCustomTextField(
                             controller: _nameController,
-                            label: _selectedUserType == UserType.organization
-                                ? 'Organization Name'
-                                : 'Full Name',
-                            icon: _selectedUserType == UserType.organization
-                                ? Icons.business
-                                : Icons.person_outline,
+                            label: 'Full Name',
+                            icon: Icons.person_outline,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter your name';

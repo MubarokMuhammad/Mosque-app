@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/ai_service.dart';
+import '../../services/firebase_service.dart';
 
 // Model for nearby events
 class NearbyEvent {
@@ -41,6 +43,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   final _locationController = TextEditingController();
   final _capacityController = TextEditingController();
   final _priceController = TextEditingController();
+  final _tagController = TextEditingController();
 
   // Form state
   String _selectedCategory = 'Religious';
@@ -54,6 +57,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
   List<NearbyEvent> _nearbyEvents = [];
   final AIService _aiService = AIService();
   bool _isGeneratingDescription = false;
+  List<String> _tags = [];
+  bool _isSaving = false;
 
   final List<String> _categories = [
     'Religious',
@@ -137,6 +142,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     _locationController.dispose();
     _capacityController.dispose();
     _priceController.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
@@ -368,7 +374,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Date Selection First - Priority Step
-          _buildSectionHeader('Select Event Date', Icons.calendar_today_rounded),
+          _buildSectionHeader(
+              'Select Event Date', Icons.calendar_today_rounded),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
@@ -421,67 +428,67 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               ],
             ),
           ),
-          
+
           // Show nearby events warning if any
-          if (_nearbyEvents.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.orange.withOpacity(0.2)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.warning_rounded,
-                        size: 18,
-                        color: Colors.orange[700],
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Nearby Events Detected',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.orange[700],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_nearbyEvents.length} event(s) found within 50 miles on similar dates.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[700],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: _showNearbyEventsDialog,
-                    icon: const Icon(Icons.visibility_rounded, size: 16),
-                    label: const Text('View Conflicts'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: Colors.orange[700],
-                      backgroundColor: Colors.orange.withOpacity(0.1),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          // if (_nearbyEvents.isNotEmpty) ...[
+          //   const SizedBox(height: 16),
+          //   Container(
+          //     padding: const EdgeInsets.all(16),
+          //     decoration: BoxDecoration(
+          //       color: Colors.orange.withOpacity(0.05),
+          //       borderRadius: BorderRadius.circular(16),
+          //       border: Border.all(color: Colors.orange.withOpacity(0.2)),
+          //     ),
+          //     child: Column(
+          //       crossAxisAlignment: CrossAxisAlignment.start,
+          //       children: [
+          //         Row(
+          //           children: [
+          //             Icon(
+          //               Icons.warning_rounded,
+          //               size: 18,
+          //               color: Colors.orange[700],
+          //             ),
+          //             const SizedBox(width: 8),
+          //             Text(
+          //               'Nearby Events Detected',
+          //               style: TextStyle(
+          //                 fontSize: 14,
+          //                 fontWeight: FontWeight.w600,
+          //                 color: Colors.orange[700],
+          //               ),
+          //             ),
+          //           ],
+          //         ),
+          //         const SizedBox(height: 8),
+          //         Text(
+          //           '${_nearbyEvents.length} event(s) found within 50 miles on similar dates.',
+          //           style: TextStyle(
+          //             fontSize: 12,
+          //             color: Colors.grey[700],
+          //           ),
+          //         ),
+          //         const SizedBox(height: 12),
+          //         TextButton.icon(
+          //           onPressed: _showNearbyEventsDialog,
+          //           icon: const Icon(Icons.visibility_rounded, size: 16),
+          //           label: const Text('View Conflicts'),
+          //           style: TextButton.styleFrom(
+          //             foregroundColor: Colors.orange[700],
+          //             backgroundColor: Colors.orange.withOpacity(0.1),
+          //             shape: RoundedRectangleBorder(
+          //               borderRadius: BorderRadius.circular(12),
+          //             ),
+          //             padding: const EdgeInsets.symmetric(
+          //               horizontal: 16,
+          //               vertical: 8,
+          //             ),
+          //           ),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ],
 
           const SizedBox(height: 24),
           _buildSectionHeader('Event Information', Icons.event_rounded),
@@ -539,6 +546,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               return null;
             },
           ),
+          const SizedBox(height: 20),
+          _buildTagsField(),
         ],
       ),
     );
@@ -616,37 +625,37 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             ),
             const SizedBox(height: 24),
           ],
-          
+
           _buildSectionHeader('Time & Recurrence', Icons.schedule_rounded),
           const SizedBox(height: 20),
           _buildTimeField(),
           const SizedBox(height: 24),
-          _buildSwitchTile(
-            title: 'Recurring Event',
-            subtitle: 'Make this a recurring event',
-            value: _isRecurring,
-            icon: Icons.repeat_rounded,
-            onChanged: (value) {
-              setState(() {
-                _isRecurring = value;
-              });
-            },
-          ),
-          if (_isRecurring) ...[
-            const SizedBox(height: 16),
-            _buildDropdownField(
-              label: 'Repeat',
-              value: _recurringType,
-              items: _recurringTypes,
-              icon: Icons.repeat_rounded,
-              onChanged: (value) {
-                setState(() {
-                  _recurringType = value!;
-                });
-              },
-            ),
-          ],
-          const SizedBox(height: 24),
+          // _buildSwitchTile(
+          //   title: 'Recurring Event',
+          //   subtitle: 'Make this a recurring event',
+          //   value: _isRecurring,
+          //   icon: Icons.repeat_rounded,
+          //   onChanged: (value) {
+          //     setState(() {
+          //       _isRecurring = value;
+          //     });
+          //   },
+          // ),
+          // if (_isRecurring) ...[
+          //   const SizedBox(height: 16),
+          //   _buildDropdownField(
+          //     label: 'Repeat',
+          //     value: _recurringType,
+          //     items: _recurringTypes,
+          //     icon: Icons.repeat_rounded,
+          //     onChanged: (value) {
+          //       setState(() {
+          //         _recurringType = value!;
+          //       });
+          //     },
+          //   ),
+          // ],
+          // const SizedBox(height: 24),
           _buildSectionHeader('Capacity & Pricing', Icons.people_rounded),
           const SizedBox(height: 20),
           Row(
@@ -685,21 +694,21 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         children: [
           _buildSectionHeader('Event Settings', Icons.settings_rounded),
           const SizedBox(height: 20),
+          // _buildSwitchTile(
+          //   title: 'Requires Registration',
+          //   subtitle: 'Users need to register to attend',
+          //   value: _requiresRegistration,
+          //   icon: Icons.how_to_reg_rounded,
+          //   onChanged: (value) {
+          //     setState(() {
+          //       _requiresRegistration = value;
+          //     });
+          //   },
+          // ),
+          // const SizedBox(height: 16),
           _buildSwitchTile(
-            title: 'Requires Registration',
-            subtitle: 'Users need to register to attend',
-            value: _requiresRegistration,
-            icon: Icons.how_to_reg_rounded,
-            onChanged: (value) {
-              setState(() {
-                _requiresRegistration = value;
-              });
-            },
-          ),
-          const SizedBox(height: 16),
-          _buildSwitchTile(
-            title: 'Public Event',
-            subtitle: 'Event visible to all users',
+            title: 'Virtual Event',
+            subtitle: 'Host online events accessible from anywhere',
             value: _isPublic,
             icon: Icons.public_rounded,
             onChanged: (value) {
@@ -709,28 +718,28 @@ class _CreateEventScreenState extends State<CreateEventScreen>
             },
           ),
           const SizedBox(height: 32),
-          _buildSectionHeader('Additional Options', Icons.more_horiz_rounded),
-          const SizedBox(height: 20),
-          _buildOptionCard(
-            title: 'Add Event Image',
-            subtitle: 'Upload an image for your event',
-            icon: Icons.image_rounded,
-            onTap: _addEventImage,
-          ),
-          const SizedBox(height: 16),
-          _buildOptionCard(
-            title: 'Event Reminders',
-            subtitle: 'Set up automatic reminders',
-            icon: Icons.notifications_rounded,
-            onTap: _setupReminders,
-          ),
-          const SizedBox(height: 16),
-          _buildOptionCard(
-            title: 'Co-organizers',
-            subtitle: 'Add other organizers',
-            icon: Icons.group_add_rounded,
-            onTap: _addCoorganizers,
-          ),
+          // _buildSectionHeader('Additional Options', Icons.more_horiz_rounded),
+          // const SizedBox(height: 20),
+          // _buildOptionCard(
+          //   title: 'Add Event Image',
+          //   subtitle: 'Upload an image for your event',
+          //   icon: Icons.image_rounded,
+          //   onTap: _addEventImage,
+          // ),
+          // const SizedBox(height: 16),
+          // _buildOptionCard(
+          //   title: 'Event Reminders',
+          //   subtitle: 'Set up automatic reminders',
+          //   icon: Icons.notifications_rounded,
+          //   onTap: _setupReminders,
+          // ),
+          // const SizedBox(height: 16),
+          // _buildOptionCard(
+          //   title: 'Co-organizers',
+          //   subtitle: 'Add other organizers',
+          //   icon: Icons.group_add_rounded,
+          //   onTap: _addCoorganizers,
+          // ),
         ],
       ),
     );
@@ -793,7 +802,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
               GestureDetector(
                 onTap: onAIPressed,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -939,12 +949,14 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                 Icon(Icons.calendar_today_rounded, color: Colors.grey[600]),
                 const SizedBox(width: 12),
                 Text(
-                  _selectedDate != null 
-                    ? '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}'
-                    : 'Select Date',
+                  _selectedDate != null
+                      ? '${_selectedDate!.day}/${_selectedDate!.month}/${_selectedDate!.year}'
+                      : 'Select Date',
                   style: TextStyle(
                     fontSize: 16,
-                    color: _selectedDate != null ? Colors.black87 : Colors.grey[600],
+                    color: _selectedDate != null
+                        ? Colors.black87
+                        : Colors.grey[600],
                   ),
                 ),
               ],
@@ -991,6 +1003,144 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         ),
       ],
     );
+  }
+
+  Widget _buildTagsField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tags',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey[200]!),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tag input field
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _tagController,
+                      decoration: InputDecoration(
+                        hintText: 'Add a tag and press Enter',
+                        hintStyle: TextStyle(color: Colors.grey[500]),
+                        border: InputBorder.none,
+                        prefixIcon: Icon(
+                          Icons.tag_rounded,
+                          color: Color(AppConfig.primaryTealColor),
+                          size: 20,
+                        ),
+                      ),
+                      onSubmitted: _addTag,
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => _addTag(_tagController.text),
+                    icon: Icon(
+                      Icons.add_circle_rounded,
+                      color: Color(AppConfig.primaryTealColor),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Tags display
+              if (_tags.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _tags.map((tag) => _buildTagChip(tag)).toList(),
+                ),
+              ],
+
+              // Helper text
+              const SizedBox(height: 8),
+              Text(
+                'Add relevant tags to help people discover your event',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.grey[600],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTagChip(String tag) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(AppConfig.primaryTealColor).withOpacity(0.1),
+            Color(AppConfig.primaryTealColor).withOpacity(0.05),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Color(AppConfig.primaryTealColor).withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            tag,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Color(AppConfig.primaryTealColor),
+            ),
+          ),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: () => _removeTag(tag),
+            child: Icon(
+              Icons.close_rounded,
+              size: 16,
+              color: Color(AppConfig.primaryTealColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _addTag(String tag) {
+    final trimmedTag = tag.trim().toLowerCase();
+    if (trimmedTag.isNotEmpty &&
+        !_tags.contains(trimmedTag) &&
+        _tags.length < 10) {
+      setState(() {
+        _tags.add(trimmedTag);
+        _tagController.clear();
+      });
+    }
+  }
+
+  void _removeTag(String tag) {
+    setState(() {
+      _tags.remove(tag);
+    });
   }
 
   Widget _buildSwitchTile({
@@ -1137,7 +1287,7 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: _isSaving ? null : _saveAsDraft,
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
@@ -1145,21 +1295,29 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                 ),
                 side: BorderSide(color: Colors.grey[300]!),
               ),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black54,
-                ),
-              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.grey),
+                      ),
+                    )
+                  : const Text(
+                      'Save as Draft',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black54,
+                      ),
+                    ),
             ),
           ),
           const SizedBox(width: 16),
           Expanded(
-            flex: 2,
             child: ElevatedButton(
-              onPressed: _createEvent,
+              onPressed: _isSaving ? null : _createEvent,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Color(AppConfig.primaryTealColor),
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1168,14 +1326,23 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                 ),
                 elevation: 0,
               ),
-              child: const Text(
-                'Create Event',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
+              child: _isSaving
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text(
+                      'Publish Event',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -1206,11 +1373,11 @@ class _CreateEventScreenState extends State<CreateEventScreen>
         _dateSelected = true;
         _checkNearbyEvents(picked);
       });
-      
+
       // Show nearby events if any found
-      if (_nearbyEvents.isNotEmpty) {
-        _showNearbyEventsDialog();
-      }
+      // if (_nearbyEvents.isNotEmpty) {
+      //   _showNearbyEventsDialog();
+      // }
     }
   }
 
@@ -1236,34 +1403,166 @@ class _CreateEventScreenState extends State<CreateEventScreen>
     }
   }
 
-  void _saveAsDraft() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Event saved as draft'),
-        backgroundColor: Color(AppConfig.primaryTealColor),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    );
+  Future<void> _saveAsDraft() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await _saveEventToFirestore(isDraft: true);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Event saved as draft successfully'),
+            backgroundColor: Color(AppConfig.primaryTealColor),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving draft: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 
-  void _createEvent() {
-    if (_formKey.currentState!.validate()) {
-      // TODO: Implement event creation logic
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Event created successfully!'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+  Future<void> _createEvent() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      await _saveEventToFirestore(isDraft: false);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Event published successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
-        ),
-      );
-      Navigator.pop(context);
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error publishing event: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
     }
+  }
+
+  Future<void> _saveEventToFirestore({required bool isDraft}) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final currentUser = authProvider.currentUser;
+
+    if (currentUser == null) {
+      throw Exception('User not authenticated');
+    }
+
+    // Get organization verification data for mosque information
+    final verificationData =
+        await FirebaseService.getOrganizationVerificationStatus(currentUser.id);
+
+    final eventData = {
+      'title': _titleController.text.trim(),
+      'description': _descriptionController.text.trim(),
+      'category': _selectedCategory,
+      'location': _locationController.text.trim(),
+      'tags': _tags,
+      'date': _selectedDate != null ? Timestamp.fromDate(_selectedDate!) : null,
+      'time': {
+        'hour': _selectedTime.hour,
+        'minute': _selectedTime.minute,
+      },
+      'isRecurring': _isRecurring,
+      'recurringType': _isRecurring ? _recurringType : null,
+      'requiresRegistration': _requiresRegistration,
+      'isPublic': _isPublic,
+      'capacity': _capacityController.text.isNotEmpty
+          ? int.tryParse(_capacityController.text)
+          : null,
+      'price': _priceController.text.isNotEmpty
+          ? double.tryParse(_priceController.text)
+          : null,
+      'isDraft': isDraft,
+      'status': isDraft ? 'draft' : 'published',
+
+      // User and organization information
+      'createdBy': {
+        'userId': currentUser.id,
+        'userName': currentUser.name,
+        'userEmail': currentUser.email,
+        'userPhone': currentUser.phone,
+        'userType': currentUser.userType.toString().split('.').last,
+      },
+
+      // Mosque/Organization information
+      'organization': verificationData != null
+          ? {
+              'organizationName': verificationData['organizationName'] ?? '',
+              'organizationDescription':
+                  verificationData['organizationDescription'] ?? '',
+              'contactEmail': verificationData['contactEmail'] ?? '',
+              'contactPhone': verificationData['contactPhone'] ?? '',
+              'website': verificationData['website'] ?? '',
+              'address': verificationData['address'] ?? '',
+              'latitude': verificationData['latitude'],
+              'longitude': verificationData['longitude'],
+              'verificationStatus':
+                  verificationData['verifyStatus'] ?? 'pending',
+            }
+          : null,
+
+      // Timestamps
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+
+    // Save to Firestore
+    await FirebaseFirestore.instance
+        .collection('mosqueapp_events')
+        .add(eventData);
   }
 
   void _addEventImage() {
@@ -1364,7 +1663,8 @@ class _CreateEventScreenState extends State<CreateEventScreen>
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
+                                    color: Color(AppConfig.primaryTealColor)
+                                        .withOpacity(0.1),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
@@ -1515,9 +1815,13 @@ class _CreateEventScreenState extends State<CreateEventScreen>
       final description = await _aiService.generateEventDescription(
         title: _titleController.text,
         category: _selectedCategory,
-        location: _locationController.text.isNotEmpty ? _locationController.text : null,
+        location: _locationController.text.isNotEmpty
+            ? _locationController.text
+            : null,
         date: _selectedDate,
-        additionalInfo: _descriptionController.text.isNotEmpty ? _descriptionController.text : null,
+        additionalInfo: _descriptionController.text.isNotEmpty
+            ? _descriptionController.text
+            : null,
       );
 
       setState(() {

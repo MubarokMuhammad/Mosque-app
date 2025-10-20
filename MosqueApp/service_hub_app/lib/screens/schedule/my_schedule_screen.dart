@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../../config/app_config.dart';
+import '../../providers/auth_provider.dart';
 
 enum ViewType { day, week, month }
 
@@ -25,97 +28,115 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     {'name': 'Isha', 'time': '20:00', 'icon': Icons.nightlight_round},
   ];
 
-  final List<Map<String, dynamic>> _allEvents = [
-    {
-      'id': '1',
-      'mosqueName': 'Islamic Center of Greater Cincinnati',
-      'event': 'Friday Prayer (Jummah)',
-      'time': '13:00',
-      'date': DateTime.now(),
-      'address': '8092 Montgomery Rd, Cincinnati, OH 45236',
-      'isMyEvent': true,
-      'type': 'prayer',
-    },
-    {
-      'id': '2',
-      'mosqueName': 'Masjid Al-Noor',
-      'event': 'Quran Study Circle',
-      'time': '19:30',
-      'date': DateTime.now().add(Duration(days: 1)),
-      'address': '2334 E 75th St, Chicago, IL 60649',
-      'isMyEvent': false,
-      'type': 'education',
-    },
-    {
-      'id': '3',
-      'mosqueName': 'Islamic Society of Boston',
-      'event': 'Community Iftar',
-      'time': '18:45',
-      'date': DateTime.now().add(Duration(days: 2)),
-      'address': '204 Prospect St, Cambridge, MA 02139',
-      'isMyEvent': true,
-      'type': 'community',
-    },
-    {
-      'id': '4',
-      'mosqueName': 'Dar Al-Hijrah Islamic Center',
-      'event': 'Youth Basketball Tournament',
-      'time': '15:00',
-      'date': DateTime.now().add(Duration(days: 3)),
-      'address': '3159 Row St, Falls Church, VA 22044',
-      'isMyEvent': false,
-      'type': 'sports',
-    },
-    {
-      'id': '5',
-      'mosqueName': 'Islamic Center of America',
-      'event': 'Islamic History Lecture',
-      'time': '20:00',
-      'date': DateTime.now().add(Duration(days: 4)),
-      'address': '19500 Ford Rd, Dearborn, MI 48128',
-      'isMyEvent': true,
-      'type': 'education',
-    },
-    {
-      'id': '6',
-      'mosqueName': 'Masjid Al-Farah',
-      'event': 'Charity Drive',
-      'time': '10:00',
-      'date': DateTime.now().add(Duration(days: 5)),
-      'address': '2045 W Peterson Ave, Chicago, IL 60659',
-      'isMyEvent': false,
-      'type': 'charity',
-    },
-    {
-      'id': '7',
-      'mosqueName': 'Islamic Center of Long Island',
-      'event': 'Marriage Workshop',
-      'time': '14:00',
-      'date': DateTime.now().add(Duration(days: 6)),
-      'address': '835 Brush Hollow Rd, Westbury, NY 11590',
-      'isMyEvent': true,
-      'type': 'workshop',
-    },
-    {
-      'id': '8',
-      'mosqueName': 'Masjid Omar Ibn Al-Khattab',
-      'event': 'Eid Celebration Planning',
-      'time': '19:00',
-      'date': DateTime.now().add(Duration(days: 7)),
-      'address': '11941 Foothill Blvd, Los Angeles, CA 91342',
-      'isMyEvent': false,
-      'type': 'planning',
-    },
-  ];
+  // Remove static data - will be replaced with real-time Firestore streams
 
-  List<Map<String, dynamic>> get _filteredEvents {
-    List<Map<String, dynamic>> events = _allEvents;
+  Stream<List<Map<String, dynamic>>> _getEventsStream() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final userEmail = authProvider.userModel?.email;
 
-    if (_currentFilter == EventFilter.myEvents) {
-      events = events.where((event) => event['isMyEvent'] == true).toList();
+    if (userEmail == null) {
+      return Stream.value([]);
     }
 
-    return events;
+    if (_currentFilter == EventFilter.all) {
+      // Get events from mosqueapp_events_attend where user.userEmail matches
+      return FirebaseFirestore.instance
+          .collection('mosqueapp_events_attend')
+          .where('user.userEmail', isEqualTo: userEmail)
+          .where('attendStatus', isEqualTo: true)
+          .snapshots()
+          .map((attendSnapshot) {
+        List<Map<String, dynamic>> events = [];
+        
+        for (var attendDoc in attendSnapshot.docs) {
+          final attendData = attendDoc.data();
+          final eventData = attendData['event'] as Map<String, dynamic>?;
+          final organizationData = attendData['organization'] as Map<String, dynamic>?;
+          
+          if (eventData != null) {
+            // Parse date - in mosqueapp_events_attend, date is a string
+            DateTime eventDate;
+            try {
+              final dateStr = eventData['date'] as String?;
+              if (dateStr != null) {
+                eventDate = DateTime.parse(dateStr);
+              } else {
+                eventDate = DateTime.now();
+              }
+            } catch (e) {
+              eventDate = DateTime.now();
+            }
+            
+            // Convert Firestore data to expected format
+            events.add({
+              'id': eventData['eventId'] ?? attendDoc.id,
+              'mosqueName': organizationData?['organizationName'] ?? 'Unknown Mosque',
+              'event': eventData['title'] ?? 'Untitled Event',
+              'time': '${eventDate.hour.toString().padLeft(2, '0')}:${eventDate.minute.toString().padLeft(2, '0')}',
+              'date': eventDate,
+              'address': organizationData?['address'] ?? eventData['location'] ?? 'Address not available',
+              'isMyEvent': false, // These are community events user is attending
+              'type': 'community_event',
+              'description': eventData['description'] ?? '',
+              'location': eventData['location'] ?? '',
+            });
+          }
+        }
+        
+        return events;
+      });
+    } else {
+      // Get events from mosqueapp_events where createdBy.userEmail matches
+      return FirebaseFirestore.instance
+          .collection('mosqueapp_events')
+          .where('createdBy.userEmail', isEqualTo: userEmail)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs.map((doc) {
+          final data = doc.data();
+          final organizationData = data['organization'] as Map<String, dynamic>?;
+          final timeData = data['time'] as Map<String, dynamic>?;
+          
+          // Parse date - in mosqueapp_events, date is a Timestamp
+          DateTime eventDate;
+          try {
+            final dateTimestamp = data['date'];
+            if (dateTimestamp is Timestamp) {
+              eventDate = dateTimestamp.toDate();
+            } else if (dateTimestamp is String) {
+              eventDate = DateTime.parse(dateTimestamp);
+            } else {
+              eventDate = DateTime.now();
+            }
+          } catch (e) {
+            eventDate = DateTime.now();
+          }
+          
+          // Parse time
+          String timeStr = '00:00';
+          if (timeData != null) {
+            final hour = timeData['hour'] ?? 0;
+            final minute = timeData['minute'] ?? 0;
+            timeStr = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+          }
+          
+          return {
+            'id': doc.id,
+            'mosqueName': organizationData?['organizationName'] ?? 'Unknown Mosque',
+            'event': data['title'] ?? 'Untitled Event',
+            'time': timeStr,
+            'date': eventDate,
+            'address': organizationData?['address'] ?? data['location'] ?? 'Address not available',
+            'isMyEvent': true, // These are events created by the user
+            'type': data['category'] ?? 'event',
+            'description': data['description'] ?? '',
+            'location': data['location'] ?? '',
+            'capacity': data['capacity'] ?? 0,
+            'status': data['status'] ?? 'published',
+          };
+        }).toList();
+      });
+    }
   }
 
   @override
@@ -123,20 +144,56 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 24),
-              _buildViewToggleAndFilter(),
-              const SizedBox(height: 24),
-              // _buildPrayerTimesSection(),
-              // const SizedBox(height: 32),
-              _buildScheduleContent(),
-            ],
-          ),
+        child: StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _getEventsStream(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      size: 48,
+                      color: Colors.grey[400],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error loading events',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final events = snapshot.data ?? [];
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 24),
+                  _buildViewToggleAndFilter(),
+                  const SizedBox(height: 24),
+                  // _buildPrayerTimesSection(),
+                  // const SizedBox(height: 32),
+                  _buildScheduleContent(events),
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -463,19 +520,19 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     );
   }
 
-  Widget _buildScheduleContent() {
+  Widget _buildScheduleContent(List<Map<String, dynamic>> events) {
     switch (_currentView) {
       case ViewType.day:
-        return _buildDayView();
+        return _buildDayView(events);
       case ViewType.week:
-        return _buildWeekView();
+        return _buildWeekView(events);
       case ViewType.month:
-        return _buildMonthView();
+        return _buildMonthView(events);
     }
   }
 
-  Widget _buildDayView() {
-    final todayEvents = _filteredEvents.where((event) {
+  Widget _buildDayView(List<Map<String, dynamic>> events) {
+    final todayEvents = events.where((event) {
       final eventDate = event['date'] as DateTime;
       return eventDate.year == _selectedDate.year &&
           eventDate.month == _selectedDate.month &&
@@ -555,14 +612,14 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     );
   }
 
-  Widget _buildWeekView() {
+  Widget _buildWeekView(List<Map<String, dynamic>> events) {
     final startOfWeek =
         _selectedDate.subtract(Duration(days: _selectedDate.weekday - 1));
     final weekEvents = <DateTime, List<Map<String, dynamic>>>{};
 
     for (int i = 0; i < 7; i++) {
       final day = startOfWeek.add(Duration(days: i));
-      weekEvents[day] = _filteredEvents.where((event) {
+      weekEvents[day] = events.where((event) {
         final eventDate = event['date'] as DateTime;
         return eventDate.year == day.year &&
             eventDate.month == day.month &&
@@ -699,7 +756,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
     );
   }
 
-  Widget _buildMonthView() {
+  Widget _buildMonthView(List<Map<String, dynamic>> events) {
     final now = DateTime.now();
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
     final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
@@ -777,7 +834,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
 
                         final dayDate =
                             DateTime(now.year, now.month, dayNumber);
-                        final dayEvents = _filteredEvents.where((event) {
+                        final dayEvents = events.where((event) {
                           final eventDate = event['date'] as DateTime;
                           return eventDate.year == dayDate.year &&
                               eventDate.month == dayDate.month &&
@@ -843,7 +900,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
         ),
         const SizedBox(height: 16),
         // Events list for selected month
-        if (_filteredEvents.isNotEmpty) ...[
+        if (events.isNotEmpty) ...[
           const Text(
             'Events This Month',
             style: TextStyle(
@@ -854,7 +911,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           ),
           const SizedBox(height: 12),
           Column(
-            children: _filteredEvents
+            children: events
                 .where((event) {
                   final eventDate = event['date'] as DateTime;
                   return eventDate.year == now.year &&

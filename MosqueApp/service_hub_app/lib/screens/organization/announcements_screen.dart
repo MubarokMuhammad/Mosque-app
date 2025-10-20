@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
 
@@ -16,6 +19,17 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
   final TextEditingController _searchController = TextEditingController();
   String _selectedCategory = 'All';
   String _searchQuery = '';
+
+  // Form controllers and state variables for announcement creation
+  final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _contentController = TextEditingController();
+  final TextEditingController _tagController = TextEditingController();
+  String _selectedAnnouncementCategory = 'General';
+  String _selectedPriority = 'Medium';
+  List<String> _tags = [];
+  bool _isLoading = false;
+  bool _sendNotification = true;
 
   // Default categories that can be extended with custom subcategories
   final List<String> _defaultCategories = [
@@ -41,84 +55,18 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
   List<String> get _categories =>
       [..._defaultCategories, ..._customSubcategories];
 
-  // Sample announcements data
-  final List<Map<String, dynamic>> _announcements = [
-    {
-      'id': '1',
-      'title': 'Friday Prayer Schedule Update',
-      'content':
-          'Due to the upcoming holiday, Friday prayer times will be adjusted. Please check the updated schedule.',
-      'category': 'Prayer Times',
-      'priority': 'High',
-      'author': 'Ahmad Rahman',
-      'publishDate': '2023-12-01',
-      'status': 'Published',
-      'views': 245,
-      'likes': 32,
-      'comments': 8,
-      'image': null,
-    },
-    {
-      'id': '2',
-      'title': 'Community Iftar Event',
-      'content':
-          'Join us for a community iftar event this Saturday at 6:30 PM. All families are welcome to participate.',
-      'category': 'Events',
-      'priority': 'Medium',
-      'author': 'Fatimah Zahra',
-      'publishDate': '2023-11-28',
-      'status': 'Published',
-      'views': 189,
-      'likes': 45,
-      'comments': 12,
-      'image': 'iftar_event.jpg',
-    },
-    {
-      'id': '3',
-      'title': 'Mosque Renovation Update',
-      'content':
-          'The mosque renovation project is progressing well. We expect completion by the end of next month.',
-      'category': 'General',
-      'priority': 'Medium',
-      'author': 'Muhammad Ali',
-      'publishDate': '2023-11-25',
-      'status': 'Published',
-      'views': 156,
-      'likes': 28,
-      'comments': 5,
-      'image': null,
-    },
-    {
-      'id': '4',
-      'title': 'Emergency Contact Information',
-      'content':
-          'Please save these emergency contact numbers for any urgent mosque-related matters.',
-      'category': 'Emergency',
-      'priority': 'High',
-      'author': 'Ahmad Rahman',
-      'publishDate': '2023-11-20',
-      'status': 'Published',
-      'views': 312,
-      'likes': 18,
-      'comments': 3,
-      'image': null,
-    },
-    {
-      'id': '5',
-      'title': 'Youth Program Registration',
-      'content':
-          'Registration is now open for our youth Islamic education program. Limited spots available.',
-      'category': 'Community',
-      'priority': 'Medium',
-      'author': 'Khadijah Omar',
-      'publishDate': '2023-12-02',
-      'status': 'Draft',
-      'views': 0,
-      'likes': 0,
-      'comments': 0,
-      'image': 'youth_program.jpg',
-    },
-  ];
+  // Firebase stream for announcements
+  Stream<QuerySnapshot> get _announcementsStream {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      return const Stream.empty();
+    }
+
+    return FirebaseFirestore.instance
+        .collection('mosqueapp_announcements')
+        .where('authorEmail', isEqualTo: user.email)
+        .snapshots();
+  }
 
   @override
   void initState() {
@@ -130,15 +78,27 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
   void dispose() {
     _tabController.dispose();
     _searchController.dispose();
+    _titleController.dispose();
+    _contentController.dispose();
+    _tagController.dispose();
     super.dispose();
   }
 
-  List<Map<String, dynamic>> get _filteredAnnouncements {
-    return _announcements.where((announcement) {
+  // Helper method to filter announcements from Firebase data
+  List<Map<String, dynamic>> _filterAnnouncements(List<DocumentSnapshot> docs) {
+    return docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      return {
+        'id': doc.id,
+        ...data,
+      };
+    }).where((announcement) {
       final matchesSearch = announcement['title']
+              .toString()
               .toLowerCase()
               .contains(_searchQuery.toLowerCase()) ||
           announcement['content']
+              .toString()
               .toLowerCase()
               .contains(_searchQuery.toLowerCase());
       final matchesCategory = _selectedCategory == 'All' ||
@@ -147,15 +107,17 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
     }).toList();
   }
 
-  List<Map<String, dynamic>> get _publishedAnnouncements {
-    return _filteredAnnouncements
-        .where((announcement) => announcement['status'] == 'Published')
+  List<Map<String, dynamic>> _getPublishedAnnouncements(
+      List<DocumentSnapshot> docs) {
+    return _filterAnnouncements(docs)
+        .where((announcement) => announcement['status'] == 'published')
         .toList();
   }
 
-  List<Map<String, dynamic>> get _draftAnnouncements {
-    return _filteredAnnouncements
-        .where((announcement) => announcement['status'] == 'Draft')
+  List<Map<String, dynamic>> _getDraftAnnouncements(
+      List<DocumentSnapshot> docs) {
+    return _filterAnnouncements(docs)
+        .where((announcement) => announcement['status'] == 'draft')
         .toList();
   }
 
@@ -255,13 +217,19 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
               fontWeight: FontWeight.bold,
             ),
           ),
-          Text(
-            '${_announcements.length} total announcements',
-            style: TextStyle(
-              color: Colors.grey[600],
-              fontSize: 12,
-              fontWeight: FontWeight.normal,
-            ),
+          StreamBuilder<QuerySnapshot>(
+            stream: _announcementsStream,
+            builder: (context, snapshot) {
+              final count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+              return Text(
+                '$count total announcements',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontSize: 12,
+                  fontWeight: FontWeight.normal,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -286,31 +254,6 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
               child: Icon(
                 Icons.category_rounded,
                 color: Color(AppConfig.primaryTealColor),
-                size: 20,
-              ),
-            ),
-          ),
-        ),
-        Container(
-          margin: const EdgeInsets.only(right: 16),
-          child: IconButton(
-            onPressed: _showAnnouncementOptions,
-            icon: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                Icons.more_vert,
-                color: Colors.grey[700],
                 size: 20,
               ),
             ),
@@ -513,52 +456,112 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
   }
 
   Widget _buildAllAnnouncementsTab() {
-    final announcements = _filteredAnnouncements;
-    if (announcements.isEmpty) {
-      return _buildEmptyState(
-          'No announcements found', 'Try adjusting your search or filters');
-    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: _announcementsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildEmptyState(
+              'Error loading announcements', 'Please try again later');
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: announcements.length,
-      itemBuilder: (context, index) {
-        final announcement = announcements[index];
-        return _buildAnnouncementCard(announcement);
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState(
+              'No announcements found', 'Create your first announcement');
+        }
+
+        final announcements = _filterAnnouncements(snapshot.data!.docs);
+
+        if (announcements.isEmpty) {
+          return _buildEmptyState(
+              'No announcements found', 'Try adjusting your search or filters');
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(24),
+          itemCount: announcements.length,
+          itemBuilder: (context, index) {
+            final announcement = announcements[index];
+            return _buildAnnouncementCard(announcement);
+          },
+        );
       },
     );
   }
 
   Widget _buildPublishedTab() {
-    final announcements = _publishedAnnouncements;
-    if (announcements.isEmpty) {
-      return _buildEmptyState('No published announcements',
-          'Create and publish your first announcement');
-    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: _announcementsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildEmptyState(
+              'Error loading announcements', 'Please try again later');
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: announcements.length,
-      itemBuilder: (context, index) {
-        final announcement = announcements[index];
-        return _buildAnnouncementCard(announcement);
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState('No published announcements',
+              'Create and publish your first announcement');
+        }
+
+        final announcements = _getPublishedAnnouncements(snapshot.data!.docs);
+
+        if (announcements.isEmpty) {
+          return _buildEmptyState('No published announcements',
+              'Create and publish your first announcement');
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(24),
+          itemCount: announcements.length,
+          itemBuilder: (context, index) {
+            final announcement = announcements[index];
+            return _buildAnnouncementCard(announcement);
+          },
+        );
       },
     );
   }
 
   Widget _buildDraftsTab() {
-    final announcements = _draftAnnouncements;
-    if (announcements.isEmpty) {
-      return _buildEmptyState(
-          'No draft announcements', 'All your announcements are published');
-    }
+    return StreamBuilder<QuerySnapshot>(
+      stream: _announcementsStream,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return _buildEmptyState(
+              'Error loading announcements', 'Please try again later');
+        }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: announcements.length,
-      itemBuilder: (context, index) {
-        final announcement = announcements[index];
-        return _buildAnnouncementCard(announcement);
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return _buildEmptyState(
+              'No draft announcements', 'All your announcements are published');
+        }
+
+        final announcements = _getDraftAnnouncements(snapshot.data!.docs);
+
+        if (announcements.isEmpty) {
+          return _buildEmptyState(
+              'No draft announcements', 'All your announcements are published');
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(24),
+          itemCount: announcements.length,
+          itemBuilder: (context, index) {
+            final announcement = announcements[index];
+            return _buildAnnouncementCard(announcement);
+          },
+        );
       },
     );
   }
@@ -597,7 +600,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
                           children: [
                             Expanded(
                               child: Text(
-                                announcement['title'],
+                                announcement['title'] ?? 'Untitled',
                                 style: const TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
@@ -605,15 +608,18 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
                                 ),
                               ),
                             ),
-                            _buildPriorityBadge(announcement['priority']),
+                            _buildPriorityBadge(
+                                announcement['priority'] ?? 'Medium'),
                           ],
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            _buildCategoryBadge(announcement['category']),
+                            _buildCategoryBadge(
+                                announcement['category'] ?? 'General'),
                             const SizedBox(width: 8),
-                            _buildStatusBadge(announcement['status']),
+                            _buildStatusBadge(
+                                announcement['status'] ?? 'draft'),
                           ],
                         ),
                       ],
@@ -693,7 +699,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
               const SizedBox(height: 12),
               // Content Preview
               Text(
-                announcement['content'],
+                announcement['description'] ?? 'No content available',
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey[700],
@@ -713,7 +719,7 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            announcement['author'],
+                            announcement['authorName'] ?? 'Unknown Author',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[500],
@@ -727,7 +733,12 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
                         const SizedBox(width: 4),
                         Flexible(
                           child: Text(
-                            announcement['publishDate'],
+                            announcement['createdAt'] != null
+                                ? (announcement['createdAt'] as Timestamp)
+                                    .toDate()
+                                    .toString()
+                                    .split(' ')[0]
+                                : 'No date',
                             style: TextStyle(
                               fontSize: 12,
                               color: Colors.grey[500],
@@ -738,15 +749,15 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
                       ],
                     ),
                   ),
-                  if (announcement['status'] == 'Published') ...[
-                    _buildStatItem(
-                        Icons.visibility, announcement['views'].toString()),
+                  if (announcement['status'] == 'published') ...[
+                    _buildStatItem(Icons.visibility,
+                        (announcement['views'] ?? 0).toString()),
                     const SizedBox(width: 8),
-                    _buildStatItem(
-                        Icons.favorite, announcement['likes'].toString()),
+                    _buildStatItem(Icons.favorite,
+                        (announcement['likes'] ?? 0).toString()),
                     const SizedBox(width: 8),
-                    _buildStatItem(
-                        Icons.comment, announcement['comments'].toString()),
+                    _buildStatItem(Icons.comment,
+                        (announcement['comments'] ?? 0).toString()),
                   ],
                 ],
               ),
@@ -900,141 +911,446 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
           right: 16,
           top: 16,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            // Title
-            const Text(
-              'Create New Announcement',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Form fields
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Title',
-                hintText: 'Enter announcement title',
-                prefixIcon: const Icon(Icons.title),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              maxLines: 4,
-              decoration: InputDecoration(
-                labelText: 'Content',
-                hintText: 'Enter announcement content',
-                prefixIcon: const Icon(Icons.description),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              decoration: InputDecoration(
-                labelText: 'Category',
-                prefixIcon: const Icon(Icons.category),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: _categories
-                  .skip(1)
-                  .map((category) => DropdownMenuItem(
-                        value: category,
-                        child: Text(category),
-                      ))
-                  .toList(),
-              onChanged: (value) {},
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              decoration: InputDecoration(
-                labelText: 'Priority',
-                prefixIcon: const Icon(Icons.priority_high),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              items: ['Low', 'Medium', 'High']
-                  .map((priority) => DropdownMenuItem(
-                        value: priority,
-                        child: Text(priority),
-                      ))
-                  .toList(),
-              onChanged: (value) {},
-            ),
-            const SizedBox(height: 24),
-            // Action buttons
-            Row(
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                ),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: TextButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Announcement saved as draft!'),
-                          backgroundColor: Color(AppConfig.primaryTealColor),
-                        ),
-                      );
-                    },
-                    child: const Text('Draft'),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text(
-                              'Announcement published successfully!'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(AppConfig.primaryTealColor),
+                // Handle bar
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[300],
+                      borderRadius: BorderRadius.circular(2),
                     ),
-                    child: const Text('Publish',
-                        style: TextStyle(color: Colors.white)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                // Title
+                const Text(
+                  'Create New Announcement',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Title Field
+                TextFormField(
+                  controller: _titleController,
+                  decoration: InputDecoration(
+                    labelText: 'Title',
+                    hintText: 'Enter announcement title',
+                    prefixIcon: const Icon(Icons.title),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter a title';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Content Field
+                TextFormField(
+                  controller: _contentController,
+                  maxLines: 4,
+                  decoration: InputDecoration(
+                    labelText: 'Content',
+                    hintText: 'Enter announcement content',
+                    prefixIcon: const Icon(Icons.description),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter content';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Tags Field
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _tagController,
+                      decoration: InputDecoration(
+                        labelText: 'Tags',
+                        hintText: 'Enter tag and press Enter',
+                        prefixIcon: const Icon(Icons.tag),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                      onFieldSubmitted: (value) {
+                        if (value.trim().isNotEmpty &&
+                            !_tags.contains(value.trim())) {
+                          setState(() {
+                            _tags.add(value.trim());
+                            _tagController.clear();
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    if (_tags.isNotEmpty)
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: _tags
+                            .map((tag) => Chip(
+                                  label: Text(tag),
+                                  deleteIcon: const Icon(Icons.close, size: 18),
+                                  onDeleted: () {
+                                    setState(() {
+                                      _tags.remove(tag);
+                                    });
+                                  },
+                                  backgroundColor:
+                                      Color(AppConfig.primaryTealColor)
+                                          .withOpacity(0.1),
+                                  labelStyle: TextStyle(
+                                    color: Color(AppConfig.primaryTealColor),
+                                    fontSize: 12,
+                                  ),
+                                ))
+                            .toList(),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
+                // Category Field
+                DropdownButtonFormField<String>(
+                  value: _selectedAnnouncementCategory,
+                  decoration: InputDecoration(
+                    labelText: 'Category',
+                    prefixIcon: const Icon(Icons.category),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  items: _categories
+                      .skip(1)
+                      .map((category) => DropdownMenuItem(
+                            value: category,
+                            child: Text(category),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedAnnouncementCategory = value!;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Priority Field
+                DropdownButtonFormField<String>(
+                  value: _selectedPriority,
+                  decoration: InputDecoration(
+                    labelText: 'Priority',
+                    prefixIcon: const Icon(Icons.priority_high),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[50],
+                  ),
+                  items: ['Low', 'Medium', 'High']
+                      .map((priority) => DropdownMenuItem(
+                            value: priority,
+                            child: Text(priority),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedPriority = value!;
+                    });
+                  },
+                ),
+                const SizedBox(height: 16),
+
+                // Notification Toggle
+
+                const SizedBox(height: 24),
+
+                // Action buttons
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    children: [
+                      // Primary action button (Publish)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton(
+                          onPressed: _isLoading
+                              ? null
+                              : () => _saveAnnouncement(isDraft: false),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Color(AppConfig.primaryTealColor),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            shadowColor: Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            disabledBackgroundColor: Colors.grey[300],
+                          ),
+                          child: _isLoading
+                              ? const SizedBox(
+                                  height: 22,
+                                  width: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white),
+                                  ),
+                                )
+                              : const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.publish, size: 20),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Publish Announcement',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Secondary actions row
+                      Row(
+                        children: [
+                          // Draft button
+                          // Cancel button
+                          Expanded(
+                            child: SizedBox(
+                              height: 44,
+                              child: TextButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () {
+                                        _clearForm();
+                                        Navigator.pop(context);
+                                      },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.grey[600],
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                child: const Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.close, size: 18),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'Cancel',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: SizedBox(
+                              height: 50,
+                              child: OutlinedButton(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _saveAnnouncement(isDraft: true),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.grey[700],
+                                  side: BorderSide(
+                                    color: Colors.grey[300]!,
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  backgroundColor: Colors.grey[50],
+                                ),
+                                child: _isLoading
+                                    ? SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor:
+                                              AlwaysStoppedAnimation<Color>(
+                                                  Colors.grey[600]!),
+                                        ),
+                                      )
+                                    : const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.drafts_outlined, size: 18),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            'Save Draft',
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );
+  }
+
+  void _clearForm() {
+    _titleController.clear();
+    _contentController.clear();
+    _tagController.clear();
+    setState(() {
+      _tags.clear();
+      _selectedAnnouncementCategory = 'General';
+      _selectedPriority = 'Medium';
+      _sendNotification = true;
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _saveAnnouncement({required bool isDraft}) async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Get current user
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Get organization data
+      final orgQuery = await FirebaseFirestore.instance
+          .collection('mosqueapp_organizations')
+          .where('adminIds', arrayContains: user.uid)
+          .limit(1)
+          .get();
+
+      if (orgQuery.docs.isEmpty) {
+        throw Exception('No organization found for this user');
+      }
+
+      final orgData = orgQuery.docs.first.data();
+
+      // Prepare announcement data
+      final announcementData = {
+        'title': _titleController.text.trim(),
+        'description': _contentController.text.trim(),
+        'category': _selectedAnnouncementCategory,
+        'priority': _selectedPriority,
+        'tags': _tags,
+        'status': isDraft ? 'draft' : 'published',
+        'sendNotification': _sendNotification,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+        'publishedAt': isDraft ? null : FieldValue.serverTimestamp(),
+        'authorId': user.uid,
+        'authorName': user.displayName ?? 'Unknown',
+        'authorEmail': user.email ?? '',
+        'organizationId': orgQuery.docs.first.id,
+        'organizationName': orgData['name'] ?? 'Unknown Organization',
+        'organizationAddress': orgData['address'] ?? '',
+        'organizationPhone': orgData['phone'] ?? '',
+        'views': 0,
+        'likes': 0,
+        'comments': 0,
+      };
+
+      // Save to Firestore
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_announcements')
+          .add(announcementData);
+
+      // Clear form and close modal
+      _clearForm();
+      Navigator.pop(context);
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isDraft
+                ? 'Announcement saved as draft successfully!'
+                : 'Announcement published successfully!',
+          ),
+          backgroundColor:
+              isDraft ? Colors.grey[600] : Color(AppConfig.primaryTealColor),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      // Show error message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error saving announcement: ${e.toString()}'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   void _showAnnouncementOptions() {
@@ -1098,34 +1414,35 @@ class _AnnouncementsScreenState extends State<AnnouncementsScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(announcement['title']),
+        title: Text(announcement['title'] ?? 'Untitled'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('Category: ${announcement['category']}'),
+              Text('Category: ${announcement['category'] ?? 'General'}'),
               const SizedBox(height: 8),
-              Text('Priority: ${announcement['priority']}'),
+              Text('Priority: ${announcement['priority'] ?? 'Medium'}'),
               const SizedBox(height: 8),
-              Text('Author: ${announcement['author']}'),
+              Text('Author: ${announcement['authorName'] ?? 'Unknown Author'}'),
               const SizedBox(height: 8),
-              Text('Status: ${announcement['status']}'),
+              Text('Status: ${announcement['status'] ?? 'draft'}'),
               const SizedBox(height: 8),
-              Text('Date: ${announcement['publishDate']}'),
+              Text(
+                  'Date: ${announcement['createdAt'] != null ? (announcement['createdAt'] is Timestamp ? (announcement['createdAt'] as Timestamp).toDate().toString().split(' ')[0] : announcement['createdAt'].toString()) : 'No date'}'),
               const SizedBox(height: 16),
               const Text('Content:',
                   style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(announcement['content']),
-              if (announcement['status'] == 'Published') ...[
+              Text(announcement['description'] ?? 'No content available'),
+              if (announcement['status'] == 'published') ...[
                 const SizedBox(height: 16),
                 const Text('Statistics:',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text('Views: ${announcement['views']}'),
-                Text('Likes: ${announcement['likes']}'),
-                Text('Comments: ${announcement['comments']}'),
+                Text('Views: ${announcement['views'] ?? 0}'),
+                Text('Likes: ${announcement['likes'] ?? 0}'),
+                Text('Comments: ${announcement['comments'] ?? 0}'),
               ],
             ],
           ),

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../config/app_config.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 
 class EventDetailBottomSheet extends StatefulWidget {
   final String title;
@@ -9,6 +12,10 @@ class EventDetailBottomSheet extends StatefulWidget {
   final String imageAsset;
   final int likes;
   final int attending;
+  final String? eventId;
+  final Map<String, dynamic>? eventData;
+  final Map<String, dynamic>? organization;
+  final String? organizationName;
 
   const EventDetailBottomSheet({
     super.key,
@@ -18,6 +25,10 @@ class EventDetailBottomSheet extends StatefulWidget {
     required this.imageAsset,
     this.likes = 120,
     this.attending = 50,
+    this.eventId,
+    this.eventData,
+    this.organization,
+    this.organizationName,
   });
 
   @override
@@ -27,6 +38,132 @@ class EventDetailBottomSheet extends StatefulWidget {
 class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
   bool isLiked = false;
   bool isAttending = false;
+  bool _isSubmittingAttend = false;
+
+  Future<void> _handleAttendTap() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.userModel;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to attend this event.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmittingAttend = true;
+    });
+
+    try {
+      Map<String, dynamic>? org = widget.organization;
+      if (org == null && widget.eventData != null) {
+        final o = widget.eventData!['organization'];
+        if (o is Map<String, dynamic>) {
+          org = o;
+        }
+      }
+
+      final safeTitle = widget.title.replaceAll(' ', '_').toLowerCase();
+      final docId = '${user.id}_${widget.eventId ?? safeTitle}';
+
+      final attendanceData = {
+        'user': {
+          'userId': user.id,
+          'userName': user.name,
+          'userEmail': user.email,
+          'userPhone': user.phone,
+          'userType': user.userType.toString().split('.').last,
+          'profileImageUrl': user.profileImageUrl,
+          'location': user.location,
+        },
+        'event': {
+          'eventId': widget.eventId,
+          'title': widget.title,
+          'date': widget.date,
+          'description': widget.description,
+          'imageAsset': widget.imageAsset,
+        },
+        'organization': {
+          'organizationId': org?['organizationId'],
+          'organizationName': org?['organizationName'] ?? widget.organizationName,
+          'address': org?['address'],
+          'latitude': org?['latitude'],
+          'longitude': org?['longitude'],
+          'verificationStatus': org?['verificationStatus'],
+        },
+        'attendStatus': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_events_attend')
+          .doc(docId)
+          .set(attendanceData, SetOptions(merge: true));
+
+      setState(() {
+        isAttending = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Attendance saved. See you at the event!'),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save attendance: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingAttend = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleUnattendTap() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.userModel;
+    if (user == null) {
+      return;
+    }
+    setState(() {
+      _isSubmittingAttend = true;
+    });
+    final safeTitle = widget.title.replaceAll(' ', '_').toLowerCase();
+    final docId = '${user.id}_${widget.eventId ?? safeTitle}';
+    try {
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_events_attend')
+          .doc(docId)
+          .set({
+        'attendStatus': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      setState(() {
+        isAttending = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Attendance removed.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update attendance: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingAttend = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,7 +188,7 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Header with close button
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -80,7 +217,7 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
               ],
             ),
           ),
-          
+
           // Event Image
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -106,7 +243,7 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
               ),
             ),
           ),
-          
+
           // Event Details
           Padding(
             padding: const EdgeInsets.all(20),
@@ -122,9 +259,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                     color: Colors.black87,
                   ),
                 ),
-                
+
                 const SizedBox(height: 8),
-                
+
                 // Date
                 Text(
                   widget.date,
@@ -134,9 +271,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                     fontWeight: FontWeight.w500,
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Description
                 Text(
                   widget.description,
@@ -146,9 +283,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                     height: 1.5,
                   ),
                 ),
-                
+
                 const SizedBox(height: 20),
-                
+
                 // Stats Row
                 Row(
                   children: [
@@ -171,9 +308,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                         ),
                       ],
                     ),
-                    
+
                     const SizedBox(width: 24),
-                    
+
                     // Attending
                     Row(
                       children: [
@@ -195,9 +332,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 24),
-                
+
                 // Action Buttons
                 Row(
                   children: [
@@ -223,7 +360,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                isLiked ? Icons.favorite : Icons.favorite_border,
+                                isLiked
+                                    ? Icons.favorite
+                                    : Icons.favorite_border,
                                 color: isLiked ? Colors.red : Colors.grey[600],
                                 size: 20,
                               ),
@@ -233,7 +372,8 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
-                                  color: isLiked ? Colors.red : Colors.grey[700],
+                                  color:
+                                      isLiked ? Colors.red : Colors.grey[700],
                                 ),
                               ),
                             ],
@@ -241,27 +381,30 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(width: 12),
-                    
+
                     // Attend Button
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            isAttending = !isAttending;
-                          });
+                        onTap: () async {
+                          if (isAttending) {
+                            await _handleUnattendTap();
+                          } else {
+                            await _handleAttendTap();
+                          }
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
-                            color: isAttending 
-                                ? Color(AppConfig.primaryTealColor) 
+                            color: isAttending
+                                ? Color(AppConfig.primaryTealColor)
                                 : Color(AppConfig.primaryTealColor),
                             borderRadius: BorderRadius.circular(8),
                             boxShadow: [
                               BoxShadow(
-                                color: Color(AppConfig.primaryTealColor).withOpacity(0.3),
+                                color: Color(AppConfig.primaryTealColor)
+                                    .withOpacity(0.3),
                                 spreadRadius: 1,
                                 blurRadius: 4,
                                 offset: const Offset(0, 2),
@@ -270,29 +413,52 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                isAttending ? Icons.check_circle : Icons.check_circle_outline,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                isAttending ? 'Attending' : 'Attend',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
+                            children: _isSubmittingAttend
+                                ? [
+                                    SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2.2,
+                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                            Colors.white),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    const Text(
+                                      'Saving...',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ]
+                                : [
+                                    Icon(
+                                      isAttending
+                                          ? Icons.check_circle
+                                          : Icons.check_circle_outline,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      isAttending ? 'Attending' : 'Attend',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
                           ),
                         ),
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(height: 20),
               ],
             ),

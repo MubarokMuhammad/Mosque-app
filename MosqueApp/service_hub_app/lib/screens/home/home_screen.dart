@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/app_config.dart';
 import '../../widgets/event_detail_bottom_sheet.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/firebase_service.dart';
 import '../mosques/mosque_detail_screen.dart';
 import '../../providers/announcement_provider.dart';
 import '../../providers/event_provider.dart';
@@ -38,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedState = 'State/Province';
   String _selectedCity = 'City';
   String _selectedEvent = 'Event';
+  String _selectedContentFilter = 'All Mosques';
   String _currentLocationText = 'Detecting location...';
   bool _isLoadingLocation = false;
   bool _hasShownLocationPermission = false;
@@ -46,11 +50,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
     _loadSubscriptionStatuses();
     // Show location permission popup and initialize location
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndShowLocationPermissionDialog();
+      // Load initial data after the first frame is built
+      _loadInitialData();
     });
     // Delay checking for new social user to ensure AuthProvider is ready
     Future.delayed(const Duration(milliseconds: 500), () {
@@ -79,15 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _checkAndShowLocationPermissionDialog() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    bool hasShownPermission =
-        prefs.getBool('has_shown_location_permission') ?? false;
+    // Show dialog whenever location service or permission is not active
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    final hasPermission =
+        await LocationService.instance.hasLocationPermission();
 
-    if (!hasShownPermission) {
-      await prefs.setBool('has_shown_location_permission', true);
+    if (!serviceEnabled || !hasPermission) {
       _showLocationPermissionDialog();
     } else {
-      // If permission was already shown before, just initialize location
       _initializeLocation();
     }
   }
@@ -97,67 +101,209 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.location_on,
-                color: Color(AppConfig.primaryTealColor),
-                size: 24,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Location Permission',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 30,
+                  offset: const Offset(0, 15),
                 ),
-              ),
-            ],
-          ),
-          content: const Text(
-            'This app needs location access to automatically detect your current location and show nearby mosques and events.',
-            style: TextStyle(fontSize: 14),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                setState(() {
-                  _currentLocationText = 'Location not available';
-                });
-              },
-              child: Text(
-                'Skip',
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              ],
             ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _initializeLocation();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(AppConfig.primaryTealColor),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with icon
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(32),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Color(AppConfig.primaryTealColor),
+                        Color(AppConfig.primaryTealColor).withOpacity(0.8),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(32),
+                        ),
+                        child: const Icon(
+                          Icons.location_on_rounded,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Enable Location',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              child: const Text(
-                'Allow',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
+
+                // Content
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Text(
+                        'Find nearby mosques and get personalized prayer times for your location.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          height: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Features
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFeatureItem(
+                              Icons.mosque_rounded,
+                              'Nearby\nMosques',
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildFeatureItem(
+                              Icons.schedule_rounded,
+                              'Prayer\nTimes',
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildFeatureItem(
+                              Icons.event_rounded,
+                              'Local\nEvents',
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 32),
+
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                setState(() {
+                                  _currentLocationText = 'Location disabled';
+                                });
+                              },
+                              style: TextButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: Text(
+                                'Skip',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                                _initializeLocation();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Color(AppConfig.primaryTealColor),
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                'Enable Location',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         );
       },
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String text) {
+    return Column(
+      children: [
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Icon(
+            icon,
+            color: Color(AppConfig.primaryTealColor),
+            size: 24,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          text,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[700],
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -230,8 +376,11 @@ class _HomeScreenState extends State<HomeScreen> {
     print(
         'Checking new social user: ${authProvider.isNewSocialUser}'); // Debug log
 
+    // All new users are now regular users by default
+    // Organization status can be requested through Settings
     if (authProvider.isNewSocialUser) {
-      _showUserTypeSelectionDialog();
+      // Clear the new social user flag without showing dialog
+      authProvider.clearNewSocialUserFlag();
     }
   }
 
@@ -253,6 +402,9 @@ class _HomeScreenState extends State<HomeScreen> {
       // Load organizations first, then load announcements and events
       await organizationProvider.loadOrganizations();
 
+      // Check organization verification status
+      await _checkOrganizationVerificationStatus();
+
       // Skip loading announcements and events to avoid Firestore index errors
       // These will be loaded when needed or after indexes are created
       // await Future.wait([
@@ -264,6 +416,59 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       print('Error loading initial data: $e');
       // Continue without showing error to user, as this is not critical for popup
+    }
+  }
+
+  Future<void> _checkOrganizationVerificationStatus() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      if (authProvider.userModel != null) {
+        print(
+            'DEBUG: Before refresh - userType: ${authProvider.userModel?.userType}, isOrganization: ${authProvider.isOrganization}');
+
+        // First refresh user data from Firestore to get latest userType
+        await authProvider.refreshUserData();
+
+        print(
+            'DEBUG: After refresh - userType: ${authProvider.userModel?.userType}, isOrganization: ${authProvider.isOrganization}');
+
+        final verificationData =
+            await FirebaseService.getOrganizationVerificationStatus(
+                authProvider.userModel!.id);
+
+        String? status = verificationData != null
+            ? verificationData['verifyStatus']?.toString()
+            : null;
+        final normalizedStatus = status?.toLowerCase();
+        print('DEBUG: Verification status: ${status ?? 'null'}');
+
+        // Source of truth: if userType in users doc is already organization, don't override
+        if (authProvider.isOrganization) {
+          print(
+              'DEBUG: User already organization in users doc; skipping overrides.');
+        } else {
+          // Only upgrade to organization when verification status accepted; do not force false
+          if (normalizedStatus == 'accepted') {
+            await authProvider.setIsOrganization(true);
+            print(
+                'DEBUG: Upgraded user to organization based on verification.');
+          } else {
+            print(
+                'DEBUG: Verification not accepted or missing; keeping current userType.');
+          }
+        }
+
+        print(
+            'DEBUG: Final - userType: ${authProvider.userModel?.userType}, isOrganization: ${authProvider.isOrganization}');
+
+        // Force rebuild of the UI to ensure bottom navigation updates
+        if (mounted) {
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      print('Error checking organization verification status: $e');
     }
   }
 
@@ -392,10 +597,26 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: TextField(
           controller: _searchController,
+          onChanged: (value) {
+            setState(() {
+              // Trigger rebuild when search text changes
+            });
+          },
           decoration: InputDecoration(
             hintText: 'Search for mosques',
             hintStyle: TextStyle(color: Colors.grey[500]),
             prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
+            suffixIcon: _searchController.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.clear, color: Colors.grey[500]),
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() {
+                        // Trigger rebuild when search is cleared
+                      });
+                    },
+                  )
+                : null,
             border: InputBorder.none,
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -830,16 +1051,69 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 16),
         SizedBox(
           height: 200,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            children: [
-              _buildTopEventCard('Community Iftar', 'Al-Noor Mosque'),
-              const SizedBox(width: 16),
-              _buildTopEventCard('Eid Prayer', 'Masjid Al-Salam'),
-              const SizedBox(width: 16),
-              _buildTopEventCard('Quran Study', 'Islamic Center'),
-            ],
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('mosqueapp_events')
+                .orderBy('createdAt', descending: true)
+                .limit(10)
+                .snapshots(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
+              }
+
+              if (snapshot.hasError) {
+                return const Center(
+                  child: Text(
+                    'Error loading events',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                );
+              }
+
+              if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                return const Center(
+                  child: Text(
+                    'No events available',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.grey,
+                    ),
+                  ),
+                );
+              }
+
+              final events = snapshot.data!.docs
+                  .where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    return data['status'] == 'published';
+                  })
+                  .take(5)
+                  .toList();
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                itemCount: events.length,
+                itemBuilder: (context, index) {
+                  final eventData =
+                      events[index].data() as Map<String, dynamic>;
+                  final eventTitle = eventData['title'] ?? 'Untitled Event';
+                  final organizationName = eventData['organization']
+                          ?['organizationName'] ??
+                      'Unknown Mosque';
+
+                  return Padding(
+                    padding: EdgeInsets.only(
+                      right: index < events.length - 1 ? 16 : 0,
+                    ),
+                    child: _buildTopEventCard(eventTitle, organizationName),
+                  );
+                },
+              );
+            },
           ),
         ),
         const SizedBox(height: 24),
@@ -897,8 +1171,8 @@ class _HomeScreenState extends State<HomeScreen> {
           date: getEventDate(title),
           description: getEventDescription(title),
           imageAsset: getImageAsset(title),
-          likes: 120,
-          attending: 50,
+          likes: 0,
+          attending: 0,
         );
       },
       child: Container(
@@ -1009,15 +1283,699 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        _buildMosqueCard('Al-Noor Mosque', '123 Main St, Anytown', true),
-        _buildMosqueCard('Masjid Al-Salam', '456 Elm St, Anytown', false),
-        _buildMosqueCard('Masjid Al-Rahman', '789 Oak St, Anytown', true),
-        const SizedBox(height: 100), // Extra space for bottom navigation
+        StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('mosqueapp_organizations')
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  'Error loading mosques: ${snapshot.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              );
+            }
+
+            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+              return const Center(
+                child: Text(
+                  'No mosques found',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                  ),
+                ),
+              );
+            }
+
+            // Get current location
+            final currentPosition = LocationService.instance.currentPosition;
+            if (currentPosition == null) {
+              return const Center(
+                child: Text(
+                  'Location not available. Please enable location services.',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                  ),
+                ),
+              );
+            }
+
+            // Apply Content Filter via real-time Firestore (events/announcements)
+            if (_selectedContentFilter != 'All Mosques') {
+              // Announcements mode
+              if (_selectedContentFilter == 'All Announcements') {
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('mosqueapp_announcements')
+                      .where('status', isEqualTo: 'published')
+                      .snapshots(),
+                  builder: (context, annSnapshot) {
+                    if (annSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (annSnapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Error loading announcements: ${annSnapshot.error}',
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      );
+                    }
+
+                    final annDocs = annSnapshot.data?.docs ?? [];
+                    final Set<String> annOrgIds = {};
+                    final Set<String> annAddresses = {};
+
+                    for (final a in annDocs) {
+                      final aData = a.data() as Map<String, dynamic>;
+                      final orgId = (aData['organizationId'] ?? '').toString();
+                      if (orgId.isNotEmpty) annOrgIds.add(orgId);
+                      final addr = (aData['organizationAddress'] ?? '')
+                          .toString()
+                          .toLowerCase()
+                          .trim();
+                      if (addr.isNotEmpty) annAddresses.add(addr);
+                    }
+
+                    final filteredMosques = snapshot.data!.docs.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      if (data['latitude'] == null ||
+                          data['longitude'] == null) {
+                        return false;
+                      }
+
+                      final distance =
+                          LocationService.instance.calculateDistance(
+                        currentPosition.latitude,
+                        currentPosition.longitude,
+                        data['latitude'].toDouble(),
+                        data['longitude'].toDouble(),
+                      );
+                      if (distance > 30.0) return false;
+
+                      if (_searchController.text.isNotEmpty) {
+                        final searchTerm = _searchController.text.toLowerCase();
+                        final mosqueName =
+                            (data['name'] ?? data['organizationName'] ?? '')
+                                .toString()
+                                .toLowerCase();
+                        final mosqueAddress =
+                            (data['address'] ?? '').toString().toLowerCase();
+                        final mosqueDescription = (data['description'] ??
+                                data['organizationDescription'] ??
+                                '')
+                            .toString()
+                            .toLowerCase();
+                        if (!mosqueName.contains(searchTerm) &&
+                            !mosqueAddress.contains(searchTerm) &&
+                            !mosqueDescription.contains(searchTerm)) {
+                          return false;
+                        }
+                      }
+
+                      final addressLower =
+                          (data['address'] ?? '').toString().toLowerCase();
+                      if (_selectedCountry != 'Country' &&
+                          !addressLower
+                              .contains(_selectedCountry.toLowerCase())) {
+                        return false;
+                      }
+                      if (_selectedState != 'State/Province' &&
+                          !addressLower
+                              .contains(_selectedState.toLowerCase())) {
+                        return false;
+                      }
+                      if (_selectedCity != 'City' &&
+                          !addressLower.contains(_selectedCity.toLowerCase())) {
+                        return false;
+                      }
+
+                      final orgIdDoc = doc.id;
+                      final orgAddrLower = addressLower.trim();
+                      final matchesAnn = annOrgIds.contains(orgIdDoc) ||
+                          (orgAddrLower.isNotEmpty &&
+                              annAddresses.contains(orgAddrLower));
+                      if (!matchesAnn) return false;
+                      return true;
+                    }).toList();
+
+                    if (filteredMosques.isEmpty) {
+                      return Center(
+                        child: Text(
+                          _searchController.text.isNotEmpty
+                              ? 'No mosques found matching "${_searchController.text}"'
+                              : 'No mosques found within 30km radius',
+                          style:
+                              const TextStyle(fontSize: 16, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: [
+                        ...filteredMosques.map((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          final mosqueName = data['name'] ??
+                              data['organizationName'] ??
+                              'Unknown Mosque';
+                          final mosqueAddress =
+                              data['address'] ?? 'Address not available';
+                          final mosqueDesc = data['description'] ??
+                              data['organizationDescription'] ??
+                              'Unknown Mosque';
+                          final distance =
+                              LocationService.instance.calculateDistance(
+                            currentPosition.latitude,
+                            currentPosition.longitude,
+                            data['latitude'].toDouble(),
+                            data['longitude'].toDouble(),
+                          );
+                          return _buildMosqueCard(
+                              mosqueName, mosqueAddress, mosqueDesc, false,
+                              distance: distance);
+                        }).toList(),
+                        const SizedBox(height: 100),
+                      ],
+                    );
+                  },
+                );
+              }
+
+              // Events mode
+              List<String>? eventCategoryKeys;
+              bool matchYouthText = false;
+              switch (_selectedContentFilter) {
+                case 'All Events':
+                  eventCategoryKeys = null; // no category filter
+                  break;
+                case 'Spiritual Events':
+                  eventCategoryKeys = ['prayer', 'religious'];
+                  break;
+                case 'Youth Events':
+                  eventCategoryKeys = null;
+                  matchYouthText = true;
+                  break;
+                case 'Educational Programs':
+                  eventCategoryKeys = ['education'];
+                  break;
+                case 'Community Service':
+                  eventCategoryKeys = ['charity', 'community'];
+                  break;
+                default:
+                  eventCategoryKeys = null;
+              }
+
+              final eventsCollection =
+                  FirebaseFirestore.instance.collection('mosqueapp_events');
+              final eventsStream = (eventCategoryKeys == null)
+                  ? eventsCollection
+                      .where('status', isEqualTo: 'published')
+                      .snapshots()
+                  : eventsCollection
+                      .where('category', whereIn: eventCategoryKeys)
+                      .snapshots();
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: eventsStream,
+                builder: (context, eventSnapshot) {
+                  if (eventSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (eventSnapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading events: ${eventSnapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    );
+                  }
+
+                  var eventDocs = eventSnapshot.data?.docs ?? [];
+
+                  // Optionally filter by 'published' if category-only stream is used
+                  eventDocs = eventDocs.where((d) {
+                    final data = d.data() as Map<String, dynamic>;
+                    final status = (data['status'] ?? '').toString();
+                    return status.isEmpty || status == 'published';
+                  }).toList();
+
+                  if (matchYouthText) {
+                    eventDocs = eventDocs.where((d) {
+                      final data = d.data() as Map<String, dynamic>;
+                      final t = (data['title'] ?? '').toString().toLowerCase();
+                      final desc =
+                          (data['description'] ?? '').toString().toLowerCase();
+                      return t.contains('youth') || desc.contains('youth');
+                    }).toList();
+                  }
+
+                  // Build sets to link organizations
+                  final Set<String> eventOrgIds = {};
+                  final Set<String> eventAddresses = {};
+                  final Set<String> eventCoords = {};
+
+                  for (final e in eventDocs) {
+                    final eData = e.data() as Map<String, dynamic>;
+                    final orgId = (eData['organizationId'] ??
+                            eData['organization']?['id'] ??
+                            '')
+                        .toString();
+                    if (orgId.isNotEmpty) eventOrgIds.add(orgId);
+                    final addr = (eData['organization']?['address'] ??
+                            eData['location'] ??
+                            '')
+                        .toString()
+                        .toLowerCase()
+                        .trim();
+                    if (addr.isNotEmpty) eventAddresses.add(addr);
+                    final elat = (eData['organization']?['latitude'] as num?)
+                        ?.toDouble();
+                    final elng = (eData['organization']?['longitude'] as num?)
+                        ?.toDouble();
+                    if (elat != null && elng != null) {
+                      eventCoords.add(
+                          '${elat.toStringAsFixed(5)}_${elng.toStringAsFixed(5)}');
+                    }
+                  }
+
+                  final filteredMosques = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    if (data['latitude'] == null || data['longitude'] == null) {
+                      return false;
+                    }
+
+                    final distance = LocationService.instance.calculateDistance(
+                      currentPosition.latitude,
+                      currentPosition.longitude,
+                      data['latitude'].toDouble(),
+                      data['longitude'].toDouble(),
+                    );
+                    if (distance > 30.0) return false;
+
+                    if (_searchController.text.isNotEmpty) {
+                      final searchTerm = _searchController.text.toLowerCase();
+                      final mosqueName =
+                          (data['name'] ?? data['organizationName'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                      final mosqueAddress =
+                          (data['address'] ?? '').toString().toLowerCase();
+                      final mosqueDescription = (data['description'] ??
+                              data['organizationDescription'] ??
+                              '')
+                          .toString()
+                          .toLowerCase();
+                      if (!mosqueName.contains(searchTerm) &&
+                          !mosqueAddress.contains(searchTerm) &&
+                          !mosqueDescription.contains(searchTerm)) {
+                        return false;
+                      }
+                    }
+
+                    final addressLower =
+                        (data['address'] ?? '').toString().toLowerCase();
+                    if (_selectedCountry != 'Country' &&
+                        !addressLower
+                            .contains(_selectedCountry.toLowerCase())) {
+                      return false;
+                    }
+                    if (_selectedState != 'State/Province' &&
+                        !addressLower.contains(_selectedState.toLowerCase())) {
+                      return false;
+                    }
+                    if (_selectedCity != 'City' &&
+                        !addressLower.contains(_selectedCity.toLowerCase())) {
+                      return false;
+                    }
+
+                    final orgIdDoc = doc.id;
+                    final orgAddrLower = addressLower.trim();
+                    final oLat = (data['latitude'] as num?)?.toDouble();
+                    final oLng = (data['longitude'] as num?)?.toDouble();
+                    final orgCoordKey = (oLat != null && oLng != null)
+                        ? '${oLat.toStringAsFixed(5)}_${oLng.toStringAsFixed(5)}'
+                        : '';
+
+                    final matchesEvent = (eventOrgIds.contains(orgIdDoc)) ||
+                        (orgCoordKey.isNotEmpty &&
+                            eventCoords.contains(orgCoordKey)) ||
+                        (orgAddrLower.isNotEmpty &&
+                            eventAddresses.contains(orgAddrLower));
+                    if (!matchesEvent) return false;
+                    return true;
+                  }).toList();
+
+                  if (filteredMosques.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchController.text.isNotEmpty
+                            ? 'No mosques found matching "${_searchController.text}"'
+                            : 'No mosques found within 30km radius',
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      ...filteredMosques.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final mosqueName = data['name'] ??
+                            data['organizationName'] ??
+                            'Unknown Mosque';
+                        final mosqueAddress =
+                            data['address'] ?? 'Address not available';
+                        final mosqueDesc = data['description'] ??
+                            data['organizationDescription'] ??
+                            'Unknown Mosque';
+
+                        final distance =
+                            LocationService.instance.calculateDistance(
+                          currentPosition.latitude,
+                          currentPosition.longitude,
+                          data['latitude'].toDouble(),
+                          data['longitude'].toDouble(),
+                        );
+                        return _buildMosqueCard(
+                            mosqueName, mosqueAddress, mosqueDesc, false,
+                            distance: distance);
+                      }).toList(),
+                      const SizedBox(height: 100),
+                    ],
+                  );
+                },
+              );
+            }
+
+            // If Event Type dropdown is selected, filter organizations by specific events
+            if (_selectedEvent != 'Event') {
+              List<String> eventCategoryKeys = [];
+              switch (_selectedEvent) {
+                case 'Jumah Prayer':
+                case 'Tarawih':
+                case 'Eid Prayer':
+                  eventCategoryKeys = ['prayer', 'religious'];
+                  break;
+                default:
+                  eventCategoryKeys = [];
+              }
+
+              if (eventCategoryKeys.isEmpty) {
+                return const SizedBox.shrink();
+              }
+
+              return StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('mosqueapp_events')
+                    .where('category', whereIn: eventCategoryKeys)
+                    .snapshots(),
+                builder: (context, eventSnapshot) {
+                  if (eventSnapshot.connectionState ==
+                      ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (eventSnapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error loading events: ${eventSnapshot.error}',
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    );
+                  }
+
+                  final eventDocs = eventSnapshot.data?.docs ?? [];
+
+                  final Set<String> eventOrgIds = {};
+                  final Set<String> eventAddresses = {};
+                  final Set<String> eventCoords = {};
+
+                  for (final e in eventDocs) {
+                    final eData = e.data() as Map<String, dynamic>;
+                    final orgId = (eData['organizationId'] ??
+                            eData['organization']?['id'] ??
+                            '')
+                        .toString();
+                    if (orgId.isNotEmpty) eventOrgIds.add(orgId);
+                    final addr = (eData['organization']?['address'] ??
+                            eData['location'] ??
+                            '')
+                        .toString()
+                        .toLowerCase()
+                        .trim();
+                    if (addr.isNotEmpty) eventAddresses.add(addr);
+                    final elat = (eData['organization']?['latitude'] as num?)
+                        ?.toDouble();
+                    final elng = (eData['organization']?['longitude'] as num?)
+                        ?.toDouble();
+                    if (elat != null && elng != null) {
+                      eventCoords.add(
+                          '${elat.toStringAsFixed(5)}_${elng.toStringAsFixed(5)}');
+                    }
+                  }
+
+                  final filteredMosques = snapshot.data!.docs.where((doc) {
+                    final data = doc.data() as Map<String, dynamic>;
+                    if (data['latitude'] == null || data['longitude'] == null) {
+                      return false;
+                    }
+
+                    final distance = LocationService.instance.calculateDistance(
+                      currentPosition.latitude,
+                      currentPosition.longitude,
+                      data['latitude'].toDouble(),
+                      data['longitude'].toDouble(),
+                    );
+                    if (distance > 30.0) return false;
+
+                    if (_searchController.text.isNotEmpty) {
+                      final searchTerm = _searchController.text.toLowerCase();
+                      final mosqueName =
+                          (data['name'] ?? data['organizationName'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                      final mosqueAddress =
+                          (data['address'] ?? '').toString().toLowerCase();
+                      final mosqueDescription = (data['description'] ??
+                              data['organizationDescription'] ??
+                              '')
+                          .toString()
+                          .toLowerCase();
+                      if (!mosqueName.contains(searchTerm) &&
+                          !mosqueAddress.contains(searchTerm) &&
+                          !mosqueDescription.contains(searchTerm)) {
+                        return false;
+                      }
+                    }
+
+                    final addressLower =
+                        (data['address'] ?? '').toString().toLowerCase();
+                    if (_selectedCountry != 'Country' &&
+                        !addressLower
+                            .contains(_selectedCountry.toLowerCase())) {
+                      return false;
+                    }
+                    if (_selectedState != 'State/Province' &&
+                        !addressLower.contains(_selectedState.toLowerCase())) {
+                      return false;
+                    }
+                    if (_selectedCity != 'City' &&
+                        !addressLower.contains(_selectedCity.toLowerCase())) {
+                      return false;
+                    }
+
+                    final orgIdDoc = doc.id;
+                    final orgAddrLower = addressLower.trim();
+                    final oLat = (data['latitude'] as num?)?.toDouble();
+                    final oLng = (data['longitude'] as num?)?.toDouble();
+                    final orgCoordKey = (oLat != null && oLng != null)
+                        ? '${oLat.toStringAsFixed(5)}_${oLng.toStringAsFixed(5)}'
+                        : '';
+
+                    final matchesEvent = (eventOrgIds.contains(orgIdDoc)) ||
+                        (orgCoordKey.isNotEmpty &&
+                            eventCoords.contains(orgCoordKey)) ||
+                        (orgAddrLower.isNotEmpty &&
+                            eventAddresses.contains(orgAddrLower));
+                    if (!matchesEvent) return false;
+                    return true;
+                  }).toList();
+
+                  if (filteredMosques.isEmpty) {
+                    return Center(
+                      child: Text(
+                        _searchController.text.isNotEmpty
+                            ? 'No mosques found matching "${_searchController.text}"'
+                            : 'No mosques found within 30km radius',
+                        style:
+                            const TextStyle(fontSize: 16, color: Colors.grey),
+                        textAlign: TextAlign.center,
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    children: [
+                      ...filteredMosques.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final mosqueName = data['name'] ??
+                            data['organizationName'] ??
+                            'Unknown Mosque';
+                        final mosqueAddress =
+                            data['address'] ?? 'Address not available';
+                        final mosqueDesc = data['description'] ??
+                            data['organizationDescription'] ??
+                            'Unknown Mosque';
+                        final distance =
+                            LocationService.instance.calculateDistance(
+                          currentPosition.latitude,
+                          currentPosition.longitude,
+                          data['latitude'].toDouble(),
+                          data['longitude'].toDouble(),
+                        );
+                        return _buildMosqueCard(
+                            mosqueName, mosqueAddress, mosqueDesc, false,
+                            distance: distance);
+                      }).toList(),
+                      const SizedBox(height: 100),
+                    ],
+                  );
+                },
+              );
+            }
+
+            // Default: filter mosques within 30km radius and by search term + location filters
+            final nearbyMosques = snapshot.data!.docs.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+
+              // Check if latitude and longitude exist
+              if (data['latitude'] == null || data['longitude'] == null) {
+                return false;
+              }
+
+              final distance = LocationService.instance.calculateDistance(
+                currentPosition.latitude,
+                currentPosition.longitude,
+                data['latitude'].toDouble(),
+                data['longitude'].toDouble(),
+              );
+
+              // Filter by distance (30km radius)
+              if (distance > 30.0) {
+                return false;
+              }
+
+              // Filter by search term
+              if (_searchController.text.isNotEmpty) {
+                final searchTerm = _searchController.text.toLowerCase();
+                final mosqueName =
+                    (data['name'] ?? data['organizationName'] ?? '')
+                        .toString()
+                        .toLowerCase();
+                final mosqueAddress =
+                    (data['address'] ?? '').toString().toLowerCase();
+                final mosqueDescription = (data['description'] ??
+                        data['organizationDescription'] ??
+                        '')
+                    .toString()
+                    .toLowerCase();
+
+                if (!mosqueName.contains(searchTerm) &&
+                    !mosqueAddress.contains(searchTerm) &&
+                    !mosqueDescription.contains(searchTerm)) {
+                  return false;
+                }
+              }
+
+              // Location filters
+              final addressLower =
+                  (data['address'] ?? '').toString().toLowerCase();
+
+              if (_selectedCountry != 'Country' &&
+                  !addressLower.contains(_selectedCountry.toLowerCase())) {
+                return false;
+              }
+
+              if (_selectedState != 'State/Province' &&
+                  !addressLower.contains(_selectedState.toLowerCase())) {
+                return false;
+              }
+
+              if (_selectedCity != 'City' &&
+                  !addressLower.contains(_selectedCity.toLowerCase())) {
+                return false;
+              }
+
+              return true;
+            }).toList();
+
+            if (nearbyMosques.isEmpty) {
+              return Center(
+                child: Text(
+                  _searchController.text.isNotEmpty
+                      ? 'No mosques found matching "${_searchController.text}"'
+                      : 'No mosques found within 30km radius',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
+
+            return Column(
+              children: [
+                ...nearbyMosques.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  final mosqueName = data['name'] ??
+                      data['organizationName'] ??
+                      'Unknown Mosque';
+                  final mosqueAddress =
+                      data['address'] ?? 'Address not available';
+                  final mosqueDesc = data['description'] ??
+                      data['organizationDescription'] ??
+                      'Unknown Mosque';
+                  // Calculate distance for this mosque
+                  final distance = LocationService.instance.calculateDistance(
+                    currentPosition.latitude,
+                    currentPosition.longitude,
+                    data['latitude'].toDouble(),
+                    data['longitude'].toDouble(),
+                  );
+
+                  return _buildMosqueCard(
+                      mosqueName, mosqueAddress, mosqueDesc, false,
+                      distance: distance);
+                }).toList(),
+                const SizedBox(
+                    height: 100), // Extra space for bottom navigation
+              ],
+            );
+          },
+        ),
       ],
     );
   }
 
-  Widget _buildMosqueCard(String name, String address, bool hasNotification) {
+  Widget _buildMosqueCard(
+      String name, String address, String description, bool hasNotification,
+      {double? distance}) {
     bool isSubscribed = _subscriptionStatus[name] ?? false;
 
     return GestureDetector(
@@ -1028,6 +1986,7 @@ class _HomeScreenState extends State<HomeScreen> {
             builder: (context) => MosqueDetailScreen(
               mosqueName: name,
               mosqueAddress: address,
+              mosqueDescription: description,
             ),
           ),
         );
@@ -1115,7 +2074,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '2.5 km away',
+                        distance != null
+                            ? '${distance.toStringAsFixed(1)} km away'
+                            : 'Distance unknown',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey[500],
@@ -1155,6 +2116,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNavigationBar() {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
+        authProvider.ensureUserDocListening();
+        print(
+            'DEBUG: Building bottom nav - isOrganization: ${authProvider.isOrganization}, userType: ${authProvider.userModel?.userType}');
+
         return Container(
           decoration: BoxDecoration(
             color: Colors.white,
@@ -1311,158 +2276,27 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showUserTypeSelectionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-          ),
-          title: const Text(
-            'Select Account Type',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Please select the account type that suits your needs:',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16),
-              ),
-              const SizedBox(height: 24),
-              _buildUserTypeOption(
-                title: 'Regular User',
-                subtitle: 'For general users who want to use mosque services',
-                icon: Icons.person,
-                userType: UserType.regular,
-              ),
-              const SizedBox(height: 16),
-              _buildUserTypeOption(
-                title: 'Organization',
-                subtitle: 'For organizations or mosque administrators',
-                icon: Icons.business,
-                userType: UserType.organization,
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildUserTypeOption({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required UserType userType,
-  }) {
-    return InkWell(
-      onTap: () => _selectUserType(userType),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: Color(AppConfig.primaryTealColor).withOpacity(0.3),
-          ),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                icon,
-                color: Color(AppConfig.primaryTealColor),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _selectUserType(UserType userType) async {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-    Navigator.of(context).pop(); // Close dialog
-
-    // Show loading
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
-
-    bool success = await authProvider.setUserType(userType);
-
-    Navigator.of(context).pop(); // Close loading
-
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Account type successfully set as ${userType == UserType.regular ? 'Regular User' : 'Organization'}'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content:
-              Text('Failed to set account type: ${authProvider.errorMessage}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      // Show dialog again if failed
-      _showUserTypeSelectionDialog();
-    }
-  }
-
-  void _showContentFilterBottomSheet() {
-    showModalBottomSheet(
+  void _showContentFilterBottomSheet() async {
+    final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => ContentFilterBottomSheet(),
     );
+
+    if (result != null && result.isNotEmpty) {
+      setState(() {
+        _selectedContentFilter = result;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Filter applied: $result'),
+          backgroundColor: Color(AppConfig.primaryTealColor),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
   }
 }
 
@@ -1480,43 +2314,36 @@ class _ContentFilterBottomSheetState extends State<ContentFilterBottomSheet> {
       'title': 'All Mosques',
       'subtitle': 'View all mosque locations',
       'icon': Icons.mosque,
-      'count': 25,
     },
     {
       'title': 'All Events',
       'subtitle': 'Browse upcoming events',
       'icon': Icons.event,
-      'count': 12,
     },
     {
       'title': 'All Announcements',
       'subtitle': 'Latest community updates',
       'icon': Icons.campaign,
-      'count': 8,
     },
     {
       'title': 'Spiritual Events',
       'subtitle': 'Prayer sessions & religious gatherings',
       'icon': Icons.auto_awesome,
-      'count': 5,
     },
     {
       'title': 'Youth Events',
       'subtitle': 'Activities for young community members',
       'icon': Icons.groups,
-      'count': 3,
     },
     {
       'title': 'Educational Programs',
       'subtitle': 'Learning sessions & workshops',
       'icon': Icons.school,
-      'count': 7,
     },
     {
       'title': 'Community Service',
       'subtitle': 'Volunteer opportunities & charity work',
       'icon': Icons.volunteer_activism,
-      'count': 4,
     },
   ];
 
@@ -1594,17 +2421,8 @@ class _ContentFilterBottomSheetState extends State<ContentFilterBottomSheet> {
                       selectedFilter = option['title'];
                     });
 
-                    // Close bottom sheet after selection
-                    Navigator.pop(context);
-
-                    // Show snackbar with selected filter
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Filter applied: ${option['title']}'),
-                        backgroundColor: Color(AppConfig.primaryTealColor),
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
+                    // Close bottom sheet and return selection
+                    Navigator.pop(context, option['title']);
                   },
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 8),
@@ -1662,27 +2480,7 @@ class _ContentFilterBottomSheetState extends State<ContentFilterBottomSheet> {
                             ],
                           ),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? Color(AppConfig.primaryTealColor)
-                                : Colors.grey[200],
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${option['count']}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color:
-                                  isSelected ? Colors.white : Colors.grey[600],
-                            ),
-                          ),
-                        ),
+                        const SizedBox.shrink(),
                       ],
                     ),
                   ),

@@ -1,12 +1,19 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 import '../models/event_model.dart';
 import '../models/announcement_model.dart';
 
+// Top-level background message handler required by Firebase Messaging
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('Received background message: ${message.messageId}');
+}
+
 class LocalNotificationService {
-  static final LocalNotificationService _instance = LocalNotificationService._internal();
+  static final LocalNotificationService _instance =
+      LocalNotificationService._internal();
   factory LocalNotificationService() => _instance;
   LocalNotificationService._internal();
 
@@ -22,8 +29,12 @@ class LocalNotificationService {
     // Initialize local notifications
     await _initializeLocalNotifications();
 
-    // Initialize Firebase messaging
-    await _initializeFirebaseMessaging();
+    // Initialize Firebase messaging (do not crash app if it fails)
+    try {
+      await _initializeFirebaseMessaging();
+    } catch (e) {
+      debugPrint('Error initializing Firebase Messaging: $e');
+    }
   }
 
   // Initialize local notifications
@@ -73,17 +84,21 @@ class LocalNotificationService {
       sound: true,
     );
 
-    print('User granted permission: ${settings.authorizationStatus}');
+    debugPrint('User granted permission: ${settings.authorizationStatus}');
 
-    // Get FCM token
-    String? token = await _firebaseMessaging.getToken();
-    print('FCM Token: $token');
+    // Attempt to get FCM token, but don't crash if unavailable
+    try {
+      String? token = await _firebaseMessaging.getToken();
+      debugPrint('FCM Token: $token');
+    } catch (e) {
+      debugPrint('Failed to get FCM token: $e');
+    }
 
     // Handle foreground messages
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
 
-    // Handle background messages
-    FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
+    // Handle background messages - requires top-level handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
     // Handle notification opened app
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
@@ -91,14 +106,14 @@ class LocalNotificationService {
 
   // Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
-    print('Notification tapped: ${response.payload}');
+    debugPrint('Notification tapped: ${response.payload}');
     // TODO: Navigate to appropriate screen based on payload
   }
 
   // Handle foreground messages
   void _handleForegroundMessage(RemoteMessage message) {
-    print('Received foreground message: ${message.messageId}');
-    
+    debugPrint('Received foreground message: ${message.messageId}');
+
     // Show local notification for foreground messages
     _showLocalNotification(
       title: message.notification?.title ?? 'New Notification',
@@ -107,14 +122,9 @@ class LocalNotificationService {
     );
   }
 
-  // Handle background messages
-  static Future<void> _handleBackgroundMessage(RemoteMessage message) async {
-    print('Received background message: ${message.messageId}');
-  }
-
   // Handle message opened app
   void _handleMessageOpenedApp(RemoteMessage message) {
-    print('Message opened app: ${message.messageId}');
+    debugPrint('Message opened app: ${message.messageId}');
     // TODO: Navigate to appropriate screen based on message data
   }
 
@@ -128,8 +138,8 @@ class LocalNotificationService {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'service_hub_channel',
-      'Service Hub Notifications',
-      channelDescription: 'Notifications for Service Hub app',
+      'UmmaHub Notifications',
+      channelDescription: 'Notifications for UmmaHub app',
       importance: Importance.max,
       priority: Priority.high,
       showWhen: false,
@@ -156,7 +166,7 @@ class LocalNotificationService {
   Future<void> scheduleEventReminder(EventModel event) async {
     // Schedule notification 1 hour before event
     final reminderTime = event.startDateTime.subtract(const Duration(hours: 1));
-    
+
     if (reminderTime.isAfter(DateTime.now())) {
       await _scheduleNotification(
         id: event.id.hashCode,
@@ -168,8 +178,9 @@ class LocalNotificationService {
     }
 
     // Schedule notification 15 minutes before event
-    final urgentReminderTime = event.startDateTime.subtract(const Duration(minutes: 15));
-    
+    final urgentReminderTime =
+        event.startDateTime.subtract(const Duration(minutes: 15));
+
     if (urgentReminderTime.isAfter(DateTime.now())) {
       await _scheduleNotification(
         id: event.id.hashCode + 1,
@@ -226,7 +237,8 @@ class LocalNotificationService {
   }
 
   // Send announcement notification
-  Future<void> sendAnnouncementNotification(AnnouncementModel announcement) async {
+  Future<void> sendAnnouncementNotification(
+      AnnouncementModel announcement) async {
     await _showLocalNotification(
       title: 'New Announcement',
       body: announcement.title,

@@ -23,7 +23,7 @@ class AppTheme {
         onSurface: darkGrey,
         onBackground: darkGrey,
       ),
-      
+
       // App Bar Theme
       appBarTheme: const AppBarTheme(
         backgroundColor: primaryTeal,

@@ -15,11 +15,13 @@ class FirebaseService {
   static final FirebaseStorage _storage = FirebaseStorage.instance;
 
   // Collections
-  static const String usersCollection = 'users';
+  static const String usersCollection = 'mosqueapp_users';
   static const String organizationsCollection = 'organizations';
   static const String announcementsCollection = 'announcements';
   static const String eventsCollection = 'events';
   static const String reportsCollection = 'reports';
+  static const String organizationVerificationCollection =
+      'mosqueapp_verify_organization';
 
   // Authentication
   static User? get currentUser => _auth.currentUser;
@@ -47,7 +49,8 @@ class FirebaseService {
           name: name,
           phone: phone,
           userType: userType,
-          profileImageUrl: null, // No profile image for email/password registration
+          profileImageUrl:
+              null, // No profile image for email/password registration
         );
       }
 
@@ -76,7 +79,15 @@ class FirebaseService {
 
   // Sign out
   static Future<void> signOut() async {
-    await _auth.signOut();
+    try {
+      await _auth.signOut();
+      // Ensure Google account is fully disconnected so account chooser appears next time
+      final googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+      await googleSignIn.disconnect();
+    } catch (e) {
+      print('Error signing out: $e');
+    }
   }
 
   // Sign in with Google
@@ -84,20 +95,21 @@ class FirebaseService {
     try {
       final GoogleSignIn googleSignIn = GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      
+
       if (googleUser == null) {
         return null; // User cancelled the sign-in
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
       UserCredential result = await _auth.signInWithCredential(credential);
-      
+
       bool isNewUser = false;
       if (result.user != null) {
         // Check if user document exists, if not create one
@@ -109,8 +121,10 @@ class FirebaseService {
             email: result.user!.email ?? '',
             name: result.user!.displayName ?? 'Google User',
             phone: '', // Google doesn't provide phone number by default
-            userType: UserType.regular, // Default to regular user, will be updated later
-            profileImageUrl: result.user!.photoURL, // Get profile photo from Google
+            userType: UserType
+                .regular, // Default to regular user, will be updated later
+            profileImageUrl:
+                result.user!.photoURL, // Get profile photo from Google
           );
         }
       }
@@ -141,7 +155,7 @@ class FirebaseService {
       );
 
       UserCredential result = await _auth.signInWithCredential(oauthCredential);
-      
+
       bool isNewUser = false;
       if (result.user != null) {
         // Check if user document exists, if not create one
@@ -149,19 +163,22 @@ class FirebaseService {
         if (existingUser == null) {
           isNewUser = true;
           String name = '';
-          if (appleCredential.givenName != null && appleCredential.familyName != null) {
+          if (appleCredential.givenName != null &&
+              appleCredential.familyName != null) {
             name = '${appleCredential.givenName} ${appleCredential.familyName}';
           } else {
             name = result.user!.displayName ?? 'Apple User';
           }
-          
+
           await createUserDocument(
             userId: result.user!.uid,
             email: result.user!.email ?? appleCredential.email ?? '',
             name: name,
             phone: '', // Apple doesn't provide phone number
-            userType: UserType.regular, // Default to regular user, will be updated later
-            profileImageUrl: result.user!.photoURL, // Get profile photo from Apple (if available)
+            userType: UserType
+                .regular, // Default to regular user, will be updated later
+            profileImageUrl: result
+                .user!.photoURL, // Get profile photo from Apple (if available)
           );
         }
       }
@@ -196,19 +213,18 @@ class FirebaseService {
       updatedAt: DateTime.now(),
     );
 
-    await _firestore
-        .collection(usersCollection)
-        .doc(userId)
-        .set(user.toFirestore());
+    await _firestore.collection(usersCollection).doc(userId).set({
+      ...user.toFirestore(),
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
   }
 
   // Get user document
   static Future<UserModel?> getUserDocument(String userId) async {
     try {
-      DocumentSnapshot doc = await _firestore
-          .collection(usersCollection)
-          .doc(userId)
-          .get();
+      DocumentSnapshot doc =
+          await _firestore.collection(usersCollection).doc(userId).get();
 
       if (doc.exists) {
         return UserModel.fromFirestore(doc);
@@ -221,16 +237,15 @@ class FirebaseService {
   }
 
   // Update user document
-  static Future<void> updateUserDocument(String userId, Map<String, dynamic> data) async {
+  static Future<void> updateUserDocument(
+      String userId, Map<String, dynamic> data) async {
     data['updatedAt'] = Timestamp.fromDate(DateTime.now());
-    await _firestore
-        .collection(usersCollection)
-        .doc(userId)
-        .update(data);
+    await _firestore.collection(usersCollection).doc(userId).update(data);
   }
 
   // Organization methods
-  static Future<String?> createOrganization(OrganizationModel organization) async {
+  static Future<String?> createOrganization(
+      OrganizationModel organization) async {
     try {
       DocumentReference doc = await _firestore
           .collection(organizationsCollection)
@@ -242,7 +257,8 @@ class FirebaseService {
     }
   }
 
-  static Future<OrganizationModel?> getOrganization(String organizationId) async {
+  static Future<OrganizationModel?> getOrganization(
+      String organizationId) async {
     try {
       DocumentSnapshot doc = await _firestore
           .collection(organizationsCollection)
@@ -268,7 +284,8 @@ class FirebaseService {
         .where('isActive', isEqualTo: true);
 
     if (category != null) {
-      query = query.where('category', isEqualTo: category.toString().split('.').last);
+      query = query.where('category',
+          isEqualTo: category.toString().split('.').last);
     }
 
     return query.snapshots().map((snapshot) {
@@ -277,10 +294,13 @@ class FirebaseService {
           .toList();
 
       if (searchQuery != null && searchQuery.isNotEmpty) {
-        organizations = organizations.where((org) =>
-            org.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-            org.description.toLowerCase().contains(searchQuery.toLowerCase())
-        ).toList();
+        organizations = organizations
+            .where((org) =>
+                org.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+                org.description
+                    .toLowerCase()
+                    .contains(searchQuery.toLowerCase()))
+            .toList();
       }
 
       return organizations;
@@ -288,7 +308,8 @@ class FirebaseService {
   }
 
   // Announcement methods
-  static Future<String?> createAnnouncement(AnnouncementModel announcement) async {
+  static Future<String?> createAnnouncement(
+      AnnouncementModel announcement) async {
     try {
       DocumentReference doc = await _firestore
           .collection(announcementsCollection)
@@ -314,12 +335,13 @@ class FirebaseService {
     }
 
     if (category != null) {
-      query = query.where('category', isEqualTo: category.toString().split('.').last);
+      query = query.where('category',
+          isEqualTo: category.toString().split('.').last);
     }
 
-    return query.snapshots().map((snapshot) =>
-        snapshot.docs.map((doc) => AnnouncementModel.fromFirestore(doc)).toList()
-    );
+    return query.snapshots().map((snapshot) => snapshot.docs
+        .map((doc) => AnnouncementModel.fromFirestore(doc))
+        .toList());
   }
 
   // Event methods
@@ -350,7 +372,8 @@ class FirebaseService {
     }
 
     if (category != null) {
-      query = query.where('category', isEqualTo: category.toString().split('.').last);
+      query = query.where('category',
+          isEqualTo: category.toString().split('.').last);
     }
 
     if (upcomingOnly) {
@@ -358,8 +381,7 @@ class FirebaseService {
     }
 
     return query.snapshots().map((snapshot) =>
-        snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList()
-    );
+        snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList());
   }
 
   // Report content
@@ -401,9 +423,7 @@ class FirebaseService {
           .orderBy('startDateTime', descending: false)
           .get();
 
-      return snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
     } catch (e) {
       print('Error getting user events: $e');
       return [];
@@ -418,16 +438,15 @@ class FirebaseService {
           .orderBy('startDateTime', descending: false)
           .get();
 
-      return snapshot.docs
-          .map((doc) => EventModel.fromFirestore(doc))
-          .toList();
+      return snapshot.docs.map((doc) => EventModel.fromFirestore(doc)).toList();
     } catch (e) {
       print('Error getting user attending events: $e');
       return [];
     }
   }
 
-  static Future<void> updateEvent(String eventId, Map<String, dynamic> updates) async {
+  static Future<void> updateEvent(
+      String eventId, Map<String, dynamic> updates) async {
     try {
       updates['updatedAt'] = Timestamp.fromDate(DateTime.now());
       await _firestore
@@ -442,10 +461,7 @@ class FirebaseService {
 
   static Future<void> deleteEvent(String eventId) async {
     try {
-      await _firestore
-          .collection(eventsCollection)
-          .doc(eventId)
-          .delete();
+      await _firestore.collection(eventsCollection).doc(eventId).delete();
     } catch (e) {
       print('Error deleting event: $e');
       throw e;
@@ -454,22 +470,23 @@ class FirebaseService {
 
   static Future<void> addEventAttendee(String eventId, String userId) async {
     try {
-      DocumentReference eventRef = _firestore
-          .collection(eventsCollection)
-          .doc(eventId);
+      DocumentReference eventRef =
+          _firestore.collection(eventsCollection).doc(eventId);
 
       await _firestore.runTransaction((transaction) async {
         DocumentSnapshot eventDoc = await transaction.get(eventRef);
-        
+
         if (!eventDoc.exists) {
           throw Exception('Event not found');
         }
 
-        List<dynamic> attendees = (eventDoc.data() as Map<String, dynamic>?)!['attendees'] ?? [];
-        
+        List<dynamic> attendees =
+            (eventDoc.data() as Map<String, dynamic>?)!['attendees'] ?? [];
+
         // Check if user is already attending
-        bool alreadyAttending = attendees.any((attendee) => attendee['userId'] == userId);
-        
+        bool alreadyAttending =
+            attendees.any((attendee) => attendee['userId'] == userId);
+
         if (!alreadyAttending) {
           attendees.add({
             'userId': userId,
@@ -491,19 +508,19 @@ class FirebaseService {
 
   static Future<void> unregisterFromEvent(String eventId, String userId) async {
     try {
-      DocumentReference eventRef = _firestore
-          .collection(eventsCollection)
-          .doc(eventId);
+      DocumentReference eventRef =
+          _firestore.collection(eventsCollection).doc(eventId);
 
       await _firestore.runTransaction((transaction) async {
         DocumentSnapshot eventDoc = await transaction.get(eventRef);
-        
+
         if (!eventDoc.exists) {
           throw Exception('Event not found');
         }
 
-        List<dynamic> attendees = (eventDoc.data() as Map<String, dynamic>?)!['attendees'] ?? [];
-        
+        List<dynamic> attendees =
+            (eventDoc.data() as Map<String, dynamic>?)!['attendees'] ?? [];
+
         // Remove user from attendees
         attendees.removeWhere((attendee) => attendee['userId'] == userId);
 
@@ -515,13 +532,11 @@ class FirebaseService {
     }
   }
 
-  static Future<void> confirmEventAttendance(String eventId, String userId) async {
+  static Future<void> confirmEventAttendance(
+      String eventId, String userId) async {
     try {
       // This is a placeholder - implement based on your attendance confirmation logic
-      await _firestore
-          .collection(eventsCollection)
-          .doc(eventId)
-          .update({
+      await _firestore.collection(eventsCollection).doc(eventId).update({
         'confirmedAttendees': FieldValue.arrayUnion([userId]),
         'updatedAt': Timestamp.fromDate(DateTime.now()),
       });
@@ -532,7 +547,8 @@ class FirebaseService {
   }
 
   // Additional Organization methods
-  static Future<List<OrganizationModel>> getUserOrganizations(String userId) async {
+  static Future<List<OrganizationModel>> getUserOrganizations(
+      String userId) async {
     try {
       QuerySnapshot snapshot = await _firestore
           .collection(organizationsCollection)
@@ -548,7 +564,8 @@ class FirebaseService {
     }
   }
 
-  static Future<List<OrganizationModel>> getOrganizationsByCategory(String category) async {
+  static Future<List<OrganizationModel>> getOrganizationsByCategory(
+      String category) async {
     try {
       QuerySnapshot snapshot = await _firestore
           .collection(organizationsCollection)
@@ -565,7 +582,8 @@ class FirebaseService {
     }
   }
 
-  static Future<void> updateOrganization(String organizationId, Map<String, dynamic> updates) async {
+  static Future<void> updateOrganization(
+      String organizationId, Map<String, dynamic> updates) async {
     try {
       updates['updatedAt'] = Timestamp.fromDate(DateTime.now());
       await _firestore
@@ -578,7 +596,8 @@ class FirebaseService {
     }
   }
 
-  static Future<void> addOrganizationMember(String organizationId, String userId) async {
+  static Future<void> addOrganizationMember(
+      String organizationId, String userId) async {
     try {
       await _firestore
           .collection(organizationsCollection)
@@ -593,7 +612,8 @@ class FirebaseService {
     }
   }
 
-  static Future<void> removeOrganizationMember(String organizationId, String userId) async {
+  static Future<void> removeOrganizationMember(
+      String organizationId, String userId) async {
     try {
       await _firestore
           .collection(organizationsCollection)
@@ -604,6 +624,121 @@ class FirebaseService {
       });
     } catch (e) {
       print('Error removing organization member: $e');
+      throw e;
+    }
+  }
+
+  // Organization Verification Methods
+  static Future<void> submitOrganizationVerification({
+    required String userId,
+    required String organizationName,
+    required String organizationDescription,
+    required String contactEmail,
+    String? website,
+    required Map<String, dynamic> userDetails,
+    String? contactPhone,
+    String? fullAddress,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      await _firestore
+          .collection(organizationVerificationCollection)
+          .doc(userId)
+          .set({
+        'userId': userId,
+        'organizationName': organizationName,
+        'organizationDescription': organizationDescription,
+        'contactEmail': contactEmail,
+        'website': website ?? '',
+        'verifyStatus': 'pending',
+        'userDetails': userDetails,
+        'submittedAt': Timestamp.fromDate(DateTime.now()),
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+        // New fields for phone/address and coordinates
+        'contactPhone': contactPhone ?? '',
+        'address': fullAddress ?? '',
+        'latitude': latitude,
+        'longitude': longitude,
+      });
+    } catch (e) {
+      print('Error submitting organization verification: $e');
+      throw e;
+    }
+  }
+
+  static Future<Map<String, dynamic>?> getOrganizationVerificationStatus(
+      String userId) async {
+    try {
+      DocumentSnapshot doc = await _firestore
+          .collection(organizationVerificationCollection)
+          .doc(userId)
+          .get();
+
+      if (doc.exists) {
+        return doc.data() as Map<String, dynamic>;
+      }
+      return null;
+    } catch (e) {
+      print('Error getting organization verification status: $e');
+      throw e;
+    }
+  }
+
+  static Future<void> updateOrganizationVerificationStatus({
+    required String userId,
+    required String status,
+  }) async {
+    try {
+      await _firestore
+          .collection(organizationVerificationCollection)
+          .doc(userId)
+          .update({
+        'verifyStatus': status,
+        'updatedAt': Timestamp.fromDate(DateTime.now()),
+      });
+
+      // If accepted, update user type in users collection
+      if (status == 'accepted') {
+        await _firestore.collection(usersCollection).doc(userId).update({
+          'userType': 'Organization',
+          'updatedAt': Timestamp.fromDate(DateTime.now()),
+        });
+      }
+    } catch (e) {
+      print('Error updating organization verification status: $e');
+      throw e;
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>>
+      getAllOrganizationVerifications() async {
+    try {
+      QuerySnapshot querySnapshot = await _firestore
+          .collection(organizationVerificationCollection)
+          .orderBy('submittedAt', descending: true)
+          .get();
+
+      return querySnapshot.docs
+          .map((doc) => {
+                'id': doc.id,
+                ...doc.data() as Map<String, dynamic>,
+              })
+          .toList();
+    } catch (e) {
+      print('Error getting all organization verifications: $e');
+      throw e;
+    }
+  }
+
+  static Future<void> deleteOrganizationVerification(String userId) async {
+    try {
+      await _firestore
+          .collection(organizationVerificationCollection)
+          .doc(userId)
+          .delete();
+    } catch (e) {
+      print('Error deleting organization verification: $e');
       throw e;
     }
   }

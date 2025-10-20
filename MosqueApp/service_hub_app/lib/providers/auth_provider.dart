@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'dart:async';
 import '../models/user_model.dart';
 import '../services/firebase_service.dart';
 
@@ -10,11 +12,14 @@ class AuthProvider with ChangeNotifier {
   String? _errorMessage;
   bool _isNewSocialUser = false;
   bool _isInitialized = false;
+  bool _userDocListening = false;
+  StreamSubscription<DocumentSnapshot>? _userDocSubscription;
 
   // Getters
   User? get firebaseUser => _firebaseUser;
   UserModel? get userModel => _userModel;
-  UserModel? get currentUser => _userModel; // Add currentUser getter for compatibility
+  UserModel? get currentUser =>
+      _userModel; // Add currentUser getter for compatibility
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _firebaseUser != null && _isInitialized;
@@ -30,11 +35,12 @@ class AuthProvider with ChangeNotifier {
   Future<void> _initializeAuth() async {
     // Wait for Firebase Auth to initialize and check for existing user
     _firebaseUser = FirebaseService.currentUser;
-    
+
     if (_firebaseUser != null) {
       await _loadUserModel(_firebaseUser!.uid);
+      _subscribeUserDoc(_firebaseUser!.uid);
     }
-    
+
     _isInitialized = true;
     notifyListeners();
 
@@ -43,7 +49,11 @@ class AuthProvider with ChangeNotifier {
       _firebaseUser = user;
       if (user != null) {
         _loadUserModel(user.uid);
+        _subscribeUserDoc(user.uid);
+        _userDocListening = true;
       } else {
+        _userDocSubscription?.cancel();
+        _userDocListening = false;
         _userModel = null;
       }
       notifyListeners();
@@ -57,6 +67,35 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       print('Error loading user model: $e');
+    }
+  }
+
+  // Subscribe to user document snapshot for realtime updates
+  void _subscribeUserDoc(String userId) {
+    _userDocSubscription?.cancel();
+    _userDocSubscription = FirebaseFirestore.instance
+        .collection(FirebaseService.usersCollection)
+        .doc(userId)
+        .snapshots()
+        .listen((doc) {
+      if (doc.exists) {
+        try {
+          _userModel = UserModel.fromFirestore(doc);
+          print('DEBUG: User doc snapshot userType: ${_userModel?.userType}');
+          notifyListeners();
+        } catch (e) {
+          print('Error parsing user doc snapshot: $e');
+        }
+      }
+    }, onError: (e) {
+      print('Error listening to user doc snapshots: $e');
+    });
+  }
+
+  // Refresh user data from Firestore
+  Future<void> refreshUserData() async {
+    if (_firebaseUser != null) {
+      await _loadUserModel(_firebaseUser!.uid);
     }
   }
 
@@ -191,7 +230,7 @@ class AuthProvider with ChangeNotifier {
 
       if (updates.isNotEmpty) {
         await FirebaseService.updateUserDocument(_firebaseUser!.uid, updates);
-        
+
         // Update local user model
         _userModel = _userModel!.copyWith(
           name: updates['name'],
@@ -200,7 +239,7 @@ class AuthProvider with ChangeNotifier {
           smsNotifications: updates['smsNotifications'],
           updatedAt: DateTime.now(),
         );
-        
+
         notifyListeners();
       }
 
@@ -240,7 +279,7 @@ class AuthProvider with ChangeNotifier {
       List<String> memberships = List.from(_userModel!.organizationMemberships);
       if (!memberships.contains(organizationId)) {
         memberships.add(organizationId);
-        
+
         await FirebaseService.updateUserDocument(_firebaseUser!.uid, {
           'organizationMemberships': memberships,
         });
@@ -249,7 +288,7 @@ class AuthProvider with ChangeNotifier {
           organizationMemberships: memberships,
           updatedAt: DateTime.now(),
         );
-        
+
         notifyListeners();
       }
 
@@ -272,7 +311,7 @@ class AuthProvider with ChangeNotifier {
 
       List<String> memberships = List.from(_userModel!.organizationMemberships);
       memberships.remove(organizationId);
-      
+
       await FirebaseService.updateUserDocument(_firebaseUser!.uid, {
         'organizationMemberships': memberships,
       });
@@ -281,7 +320,7 @@ class AuthProvider with ChangeNotifier {
         organizationMemberships: memberships,
         updatedAt: DateTime.now(),
       );
-      
+
       notifyListeners();
       return true;
     } catch (e) {
@@ -327,7 +366,7 @@ class AuthProvider with ChangeNotifier {
       // Reload user model
       await _loadUserModel(_firebaseUser!.uid);
       _isNewSocialUser = false;
-      
+
       return true;
     } catch (e) {
       _setError(e.toString());
@@ -341,5 +380,43 @@ class AuthProvider with ChangeNotifier {
   void clearNewSocialUserFlag() {
     _isNewSocialUser = false;
     notifyListeners();
+  }
+
+  // Set organization status based on verification
+  Future<void> setIsOrganization(bool isOrganization) async {
+    if (_userModel != null && _firebaseUser != null) {
+      try {
+        UserType newUserType =
+            isOrganization ? UserType.organization : UserType.regular;
+
+        // Update in Firestore
+        await FirebaseService.updateUserDocument(_firebaseUser!.uid, {
+          'userType': newUserType.toString().split('.').last,
+        });
+
+        // Update local model
+        _userModel = UserModel(
+          id: _userModel!.id,
+          name: _userModel!.name,
+          email: _userModel!.email,
+          phone: _userModel!.phone,
+          userType: newUserType,
+          profileImageUrl: _userModel!.profileImageUrl,
+          createdAt: _userModel!.createdAt,
+          updatedAt: DateTime.now(),
+        );
+
+        notifyListeners();
+      } catch (e) {
+        print('Error updating organization status: $e');
+      }
+    }
+  }
+
+  void ensureUserDocListening() {
+    if (!_userDocListening && _firebaseUser != null) {
+      _userDocListening = true;
+      _subscribeUserDoc(_firebaseUser!.uid);
+    }
   }
 }
