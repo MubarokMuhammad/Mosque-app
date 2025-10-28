@@ -1,4 +1,4 @@
-package com.example.service_hub_app
+package REMOVED_SECRET
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -24,7 +24,16 @@ import {
   Fade,
   Grow,
   Tooltip,
-  Avatar
+  Avatar,
+  Collapse,
+  Tabs,
+  Tab,
+  Chip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  Divider
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -34,10 +43,17 @@ import {
   Person as PersonIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
-  LocationCity as OfficeIcon
+  LocationCity as OfficeIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  Announcement as AnnouncementIcon,
+  Event as EventIcon,
+  CalendarToday as CalendarIcon,
+  Schedule as ScheduleIcon,
+  LocationOn as LocationIcon
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
-import { organizationService } from '../services/firebaseService';
+import { organizationService, announcementService, eventService } from '../services/firebaseService';
 import SearchFilterSort from '../components/SearchFilterSort';
 
 const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
@@ -238,12 +254,76 @@ const DialogActionButton = styled(Button)(({ theme }) => ({
   },
 }));
 
+const ExpandableRow = styled(TableRow)(({ theme }) => ({
+  '& .MuiTableCell-root': {
+    borderBottom: 'none',
+    padding: 0,
+  }
+}));
+
+const TabPanel = ({ children, value, index, ...other }) => (
+  <div
+    role="tabpanel"
+    hidden={value !== index}
+    id={`organization-tabpanel-${index}`}
+    aria-labelledby={`organization-tab-${index}`}
+    {...other}
+  >
+    {value === index && (
+      <Box sx={{ p: 3 }}>
+        {children}
+      </Box>
+    )}
+  </div>
+);
+
+const StyledTabs = styled(Tabs)(({ theme }) => ({
+  borderBottom: '1px solid rgba(0, 105, 92, 0.12)',
+  '& .MuiTabs-indicator': {
+    backgroundColor: '#00695c',
+    height: 3,
+  },
+}));
+
+const StyledTab = styled(Tab)(({ theme }) => ({
+  textTransform: 'none',
+  fontWeight: 600,
+  fontSize: '0.95rem',
+  color: '#666',
+  '&.Mui-selected': {
+    color: '#00695c',
+  },
+  '&:hover': {
+    color: '#00695c',
+    opacity: 0.8,
+  },
+}));
+
+const DetailCard = styled(Card)(({ theme }) => ({
+  margin: theme.spacing(1, 0),
+  borderRadius: '12px',
+  boxShadow: '0 2px 8px rgba(0, 105, 92, 0.08)',
+  border: '1px solid rgba(0, 105, 92, 0.12)',
+  transition: 'all 0.3s ease',
+  '&:hover': {
+    boxShadow: '0 4px 16px rgba(0, 105, 92, 0.15)',
+    transform: 'translateY(-2px)',
+  },
+}));
+
 const Organizations = () => {
   const [organizations, setOrganizations] = useState([]);
   const [open, setOpen] = useState(false);
   const [editingOrg, setEditingOrg] = useState(null);
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  
+  // Expandable rows state
+  const [expandedRows, setExpandedRows] = useState({});
+  const [tabValues, setTabValues] = useState({});
+  const [organizationAnnouncements, setOrganizationAnnouncements] = useState({});
+  const [organizationEvents, setOrganizationEvents] = useState({});
+  const listenersRef = useRef({});
   
   // Search, Filter, Sort states
   const [searchValue, setSearchValue] = useState('');
@@ -267,6 +347,7 @@ const Organizations = () => {
     fetchOrganizations();
   }, []);
 
+  // Re-add missing fetchOrganizations function
   const fetchOrganizations = async () => {
     try {
       setLoading(true);
@@ -278,17 +359,125 @@ const Organizations = () => {
       setLoading(false);
     }
   };
+  useEffect(() => {
+    return () => {
+      const refs = listenersRef.current || {};
+      Object.keys(refs).forEach((id) => {
+        refs[id].announcements?.();
+        refs[id].events?.();
+      });
+    };
+  }, []);
+
+  const subscribeOrganizationData = (org) => {
+    try {
+      console.log('🏢 Subscribing to organization data:', org);
+      console.log('🏢 Organization Name:', org.organizationName);
+      console.log('🏢 Organization Address:', org.address);
+      
+      // Use organizationName and organizationAddress as filter conditions
+      const unsubAnnouncements = announcementService.subscribeByOrganizationDetails(
+        org.organizationName,
+        org.address,
+        (docs) => {
+          console.log('📋 Received announcements for org:', org.organizationName, 'Count:', docs.length);
+          console.log('📋 Announcements data:', docs);
+          const sorted = [...docs].sort((a, b) => {
+            const aTs = a.createdAt?.toMillis?.() ?? (a.createdAt?.toDate?.()?.getTime?.() ?? (typeof a.createdAt === 'string' || typeof a.createdAt === 'number' ? new Date(a.createdAt).getTime() : 0));
+            const bTs = b.createdAt?.toMillis?.() ?? (b.createdAt?.toDate?.()?.getTime?.() ?? (typeof b.createdAt === 'string' || typeof b.createdAt === 'number' ? new Date(b.createdAt).getTime() : 0));
+            return bTs - aTs;
+          });
+          setOrganizationAnnouncements(prev => ({
+            ...prev,
+            [org.id]: sorted
+          }));
+        }
+      );
+
+      const unsubEvents = eventService.subscribeByOrganizationDetails(
+        org.organizationName,
+        org.address,
+        (docs) => {
+          console.log('📅 Received events for org:', org.organizationName, 'Count:', docs.length);
+          console.log('📅 Events data:', docs);
+          const sorted = [...docs].sort((a, b) => {
+            const aTs = a.createdAt?.toMillis?.() ?? (a.createdAt?.toDate?.()?.getTime?.() ?? (typeof a.createdAt === 'string' || typeof a.createdAt === 'number' ? new Date(a.createdAt).getTime() : 0));
+            const bTs = b.createdAt?.toMillis?.() ?? (b.createdAt?.toDate?.()?.getTime?.() ?? (typeof b.createdAt === 'string' || typeof b.createdAt === 'number' ? new Date(b.createdAt).getTime() : 0));
+            return bTs - aTs;
+          });
+          setOrganizationEvents(prev => ({
+            ...prev,
+            [org.id]: sorted
+          }));
+        }
+      );
+
+      listenersRef.current[org.id] = { announcements: unsubAnnouncements, events: unsubEvents };
+    } catch (error) {
+      console.error('Error subscribing to organization data:', error);
+      showSnackbar('Error fetching organization details', 'error');
+    }
+  };
+
+  const handleRowExpand = (organizationId) => {
+    const isExpanded = expandedRows[organizationId];
+    
+    setExpandedRows(prev => ({
+      ...prev,
+      [organizationId]: !isExpanded
+    }));
+
+    // Initialize tab value for this organization
+    if (!tabValues[organizationId]) {
+      setTabValues(prev => ({
+        ...prev,
+        [organizationId]: 0
+      }));
+    }
+
+    if (!isExpanded) {
+      if (!listenersRef.current[organizationId]) {
+        // Find the organization object
+        const org = organizations.find(o => o.id === organizationId);
+        if (org) {
+          subscribeOrganizationData(org);
+        }
+      }
+    } else {
+      const refs = listenersRef.current[organizationId];
+      if (refs) {
+        refs.announcements?.();
+        refs.events?.();
+        delete listenersRef.current[organizationId];
+      }
+    }
+  };
+
+  const handleTabChange = (organizationId, newValue) => {
+    setTabValues(prev => ({
+      ...prev,
+      [organizationId]: newValue
+    }));
+
+    // If switching to announcements tab (index 0) or events tab (index 1) and no listener exists, fetch data
+    if ((newValue === 0 || newValue === 1) && !listenersRef.current[organizationId]) {
+      const org = organizations.find(o => o.id === organizationId);
+      if (org) {
+        subscribeOrganizationData(org);
+      }
+    }
+  };
 
   const handleOpen = (org = null) => {
     if (org) {
       setEditingOrg(org);
       setFormData({
         organizationName: org.organizationName || '',
-        leader: org.leader || '',
+        leader: org.leader || org.userDetails?.name || '',
         email: org.email || '',
         password: org.password || '',
-        phoneNumber: org.phoneNumber || '',
-        office: org.office || ''
+        phoneNumber: org.phoneNumber || org.contactPhone || '',
+        office: org.office || org.address || ''
       });
     } else {
       setEditingOrg(null);
@@ -478,8 +667,9 @@ const Organizations = () => {
           <Table>
             <StyledTableHead>
               <TableRow>
+                <TableCell width="50"></TableCell>
                 <TableCell>Organization</TableCell>
-                <TableCell>Leader</TableCell>
+                <TableCell>Admin</TableCell>
                 <TableCell>Contact</TableCell>
                 <TableCell>Office</TableCell>
                 <TableCell align="center">Actions</TableCell>
@@ -487,72 +677,245 @@ const Organizations = () => {
             </StyledTableHead>
             <TableBody>
               {filteredAndSortedOrganizations.map((org, index) => (
-                <Grow in timeout={600 + index * 100} key={org.id}>
-                  <StyledTableRow>
-                    <TableCell>
-                      <InfoBox>
-                        <Avatar sx={{ backgroundColor: '#00695c', width: 40, height: 40 }}>
-                          <BusinessIcon />
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body1" sx={{ fontWeight: 600, color: '#00695c' }}>
-                            {org.organizationName}
-                          </Typography>
-                        </Box>
-                      </InfoBox>
-                    </TableCell>
-                    <TableCell>
-                      <InfoBox>
-                        <PersonIcon sx={{ color: '#00695c', fontSize: 20 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {org.leader}
-                        </Typography>
-                      </InfoBox>
-                    </TableCell>
-                    <TableCell>
-                      <Box>
-                        <InfoBox sx={{ mb: 0.5 }}>
-                          <EmailIcon sx={{ color: '#00695c', fontSize: 18 }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                            {org.email}
-                          </Typography>
-                        </InfoBox>
+                <React.Fragment key={org.id}>
+                  <Grow in timeout={600 + index * 100}>
+                    <StyledTableRow>
+                      <TableCell>
+                        <IconButton
+                          onClick={() => handleRowExpand(org.id)}
+                          sx={{
+                            color: '#00695c',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              backgroundColor: 'rgba(0, 105, 92, 0.08)',
+                              transform: 'scale(1.1)'
+                            }
+                          }}
+                        >
+                          {expandedRows[org.id] ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                        </IconButton>
+                      </TableCell>
+                      <TableCell>
                         <InfoBox>
-                          <PhoneIcon sx={{ color: '#00695c', fontSize: 18 }} />
-                          <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                            {org.phoneNumber}
+                          <Avatar sx={{ backgroundColor: '#00695c', width: 40, height: 40 }}>
+                            <BusinessIcon />
+                          </Avatar>
+                          <Box>
+                            <Typography variant="body1" sx={{ fontWeight: 600, color: '#00695c' }}>
+                              {org.organizationName}
+                            </Typography>
+                          </Box>
+                        </InfoBox>
+                      </TableCell>
+                      <TableCell>
+                        <InfoBox>
+                          <PersonIcon sx={{ color: '#00695c', fontSize: 20 }} />
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {org.leader || org.userDetails?.name || 'N/A'}
                           </Typography>
                         </InfoBox>
-                      </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box>
+                          <InfoBox sx={{ mb: 0.5 }}>
+                            <EmailIcon sx={{ color: '#00695c', fontSize: 18 }} />
+                            <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                              {org.email}
+                            </Typography>
+                          </InfoBox>
+                          <InfoBox>
+                            <PhoneIcon sx={{ color: '#00695c', fontSize: 18 }} />
+                            <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                              {org.phoneNumber || org.contactPhone || 'N/A'}
+                            </Typography>
+                          </InfoBox>
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <InfoBox>
+                          <OfficeIcon sx={{ color: '#00695c', fontSize: 20 }} />
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {org.office || org.address || 'N/A'}
+                          </Typography>
+                        </InfoBox>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Tooltip title="Edit Organization">
+                          <ActionButton
+                            className="edit-btn"
+                            onClick={() => handleOpen(org)}
+                          >
+                            <EditIcon />
+                          </ActionButton>
+                        </Tooltip>
+                        <Tooltip title="Delete Organization">
+                          <ActionButton
+                            className="delete-btn"
+                            onClick={() => handleDelete(org.id)}
+                          >
+                            <DeleteIcon />
+                          </ActionButton>
+                        </Tooltip>
+                      </TableCell>
+                    </StyledTableRow>
+                  </Grow>
+                  
+                  {/* Expandable Content */}
+                  <ExpandableRow>
+                    <TableCell colSpan={6} sx={{ p: 0 }}>
+                      <Collapse in={expandedRows[org.id]} timeout="auto" unmountOnExit>
+                        <Box sx={{ backgroundColor: '#f8f9fa', borderTop: '1px solid rgba(0, 105, 92, 0.12)' }}>
+                          <StyledTabs
+                            value={tabValues[org.id] || 0}
+                            onChange={(e, newValue) => handleTabChange(org.id, newValue)}
+                            sx={{ px: 3, pt: 2 }}
+                          >
+                            <StyledTab
+                              icon={<AnnouncementIcon />}
+                              iconPosition="start"
+                              label={`Announcements (${organizationAnnouncements[org.id]?.length || 0})`}
+                            />
+                            <StyledTab
+                              icon={<EventIcon />}
+                              iconPosition="start"
+                              label={`Events (${organizationEvents[org.id]?.length || 0})`}
+                            />
+                          </StyledTabs>
+
+                          <TabPanel value={tabValues[org.id] || 0} index={0}>
+                            <Typography variant="h6" sx={{ mb: 2, color: '#00695c', fontWeight: 600 }}>
+                              Announcements Archive
+                            </Typography>
+                            {organizationAnnouncements[org.id]?.length > 0 ? (
+                              <Grid container spacing={2}>
+                                {organizationAnnouncements[org.id].map((announcement) => (
+                                  <Grid item xs={12} md={6} key={announcement.id}>
+                                    <DetailCard>
+                                      <CardContent>
+                                        <Box display="flex" alignItems="flex-start" gap={2}>
+                                          <Avatar sx={{ backgroundColor: '#ff9800', width: 40, height: 40 }}>
+                                            <AnnouncementIcon />
+                                          </Avatar>
+                                          <Box flex={1}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                                              {announcement.title}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                              {announcement.description}
+                                            </Typography>
+                                            <Box display="flex" alignItems="center" gap={2}>
+                                              <Chip
+                                                size="small"
+                                                label={announcement.type || 'General'}
+                                                sx={{ backgroundColor: 'rgba(255, 152, 0, 0.1)', color: '#ff9800' }}
+                                              />
+                                              <Typography variant="caption" color="text.secondary">
+                                                {announcement.createdAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                                              </Typography>
+                                            </Box>
+                                          </Box>
+                                        </Box>
+                                      </CardContent>
+                                    </DetailCard>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            ) : (
+                              <Box textAlign="center" py={4}>
+                                <AnnouncementIcon sx={{ fontSize: 64, color: '#ccc', mb: 2 }} />
+                                <Typography variant="h6" color="text.secondary">
+                                  No announcements found
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  This organization hasn't published any announcements yet.
+                                </Typography>
+                              </Box>
+                            )}
+                          </TabPanel>
+
+                          <TabPanel value={tabValues[org.id] || 0} index={1}>
+                            <Typography variant="h6" sx={{ mb: 2, color: '#00695c', fontWeight: 600 }}>
+                              Events Archive
+                            </Typography>
+                            {organizationEvents[org.id]?.length > 0 ? (
+                              <Grid container spacing={2}>
+                                {organizationEvents[org.id].map((event) => (
+                                  <Grid item xs={12} md={6} key={event.id}>
+                                    <DetailCard>
+                                      <CardContent>
+                                        <Box display="flex" alignItems="flex-start" gap={2}>
+                                          <Avatar sx={{ backgroundColor: '#2196f3', width: 40, height: 40 }}>
+                                            <EventIcon />
+                                          </Avatar>
+                                          <Box flex={1}>
+                                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                                              {event.eventName || event.title}
+                                            </Typography>
+                                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                              {event.description}
+                                            </Typography>
+                                            <Box display="flex" flexDirection="column" gap={1}>
+                                              {event.eventDate && (
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                  <CalendarIcon sx={{ fontSize: 16, color: '#666' }} />
+                                                  <Typography variant="caption" color="text.secondary">
+                                                    {event.eventDate?.toDate?.()?.toLocaleDateString() || event.eventDate}
+                                                  </Typography>
+                                                </Box>
+                                              )}
+                                              {event.eventTime && (
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                  <ScheduleIcon sx={{ fontSize: 16, color: '#666' }} />
+                                                  <Typography variant="caption" color="text.secondary">
+                                                    {event.eventTime}
+                                                  </Typography>
+                                                </Box>
+                                              )}
+                                              {event.location && (
+                                                <Box display="flex" alignItems="center" gap={1}>
+                                                  <LocationIcon sx={{ fontSize: 16, color: '#666' }} />
+                                                  <Typography variant="caption" color="text.secondary">
+                                                    {event.location}
+                                                  </Typography>
+                                                </Box>
+                                              )}
+                                              <Box display="flex" alignItems="center" gap={2} mt={1}>
+                                                <Chip
+                                                  size="small"
+                                                  label={event.category || 'Event'}
+                                                  sx={{ backgroundColor: 'rgba(33, 150, 243, 0.1)', color: '#2196f3' }}
+                                                />
+                                                <Chip
+                                                  size="small"
+                                                  label={event.status || 'Active'}
+                                                  color={event.status === 'completed' ? 'success' : 'primary'}
+                                                />
+                                              </Box>
+                                            </Box>
+                                          </Box>
+                                        </Box>
+                                      </CardContent>
+                                    </DetailCard>
+                                  </Grid>
+                                ))}
+                              </Grid>
+                            ) : (
+                              <Box textAlign="center" py={4}>
+                                <EventIcon sx={{ fontSize: 64, color: '#ccc', mb: 2 }} />
+                                <Typography variant="h6" color="text.secondary">
+                                  No events found
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  This organization hasn't organized any events yet.
+                                </Typography>
+                              </Box>
+                            )}
+                          </TabPanel>
+                        </Box>
+                      </Collapse>
                     </TableCell>
-                    <TableCell>
-                      <InfoBox>
-                        <OfficeIcon sx={{ color: '#00695c', fontSize: 20 }} />
-                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                          {org.office}
-                        </Typography>
-                      </InfoBox>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Tooltip title="Edit Organization">
-                        <ActionButton
-                          className="edit-btn"
-                          onClick={() => handleOpen(org)}
-                        >
-                          <EditIcon />
-                        </ActionButton>
-                      </Tooltip>
-                      <Tooltip title="Delete Organization">
-                        <ActionButton
-                          className="delete-btn"
-                          onClick={() => handleDelete(org.id)}
-                        >
-                          <DeleteIcon />
-                        </ActionButton>
-                      </Tooltip>
-                    </TableCell>
-                  </StyledTableRow>
-                </Grow>
+                  </ExpandableRow>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
@@ -577,8 +940,8 @@ const Organizations = () => {
               <Grid item xs={12} sm={6}>
                 <StyledTextField
                   fullWidth
-                  label="Leader"
-                  value={formData.leader}
+                  label="Admin"
+                  value={formData.leader || formData.userDetails?.name}
                   onChange={(e) => handleInputChange('leader', e.target.value)}
                 />
               </Grid>
@@ -609,26 +972,16 @@ const Organizations = () => {
           </FormSection>
 
           <FormSection>
-            <SectionTitle>Account Security</SectionTitle>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <StyledTextField
-                  fullWidth
-                  label="Password"
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <StyledTextField
-                  fullWidth
-                  label="Office"
-                  value={formData.office}
-                  onChange={(e) => handleInputChange('office', e.target.value)}
-                />
-              </Grid>
-            </Grid>
+            <SectionTitle>Address</SectionTitle>
+            <StyledTextField
+              fullWidth
+              sx={{ width: '100%' }}        
+              label="Office"
+              multiline
+              minRows={3}
+              value={formData.office || formData.address}
+              onChange={(e) => handleInputChange('office', e.target.value)}
+            />
           </FormSection>
         </StyledDialogContent>
         <StyledDialogActions>

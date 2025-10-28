@@ -121,24 +121,35 @@ const Login = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // For demo purposes, check against default credentials
-    if (email === 'admin@mail.com' && password === 'admin1234') {
-      try {
-        setError('');
-        setLoading(true);
-        // Create a mock user session
-        localStorage.setItem('adminUser', JSON.stringify({ email: 'admin@mail.com' }));
-        
-        // Add a small delay for better UX
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 1000);
-      } catch (error) {
-        setError('Failed to log in');
-        setLoading(false);
+    try {
+      setError('');
+      setLoading(true);
+      
+      // Use Firebase Authentication instead of mock login
+      await login(email, password);
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Login error:', error);
+      
+      // More specific error messages based on Firebase error codes
+      let errorMessage = 'Failed to log in. Please check your credentials.';
+      
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No user found with this email address.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address format.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else if (error.code === 'auth/too-many-requests') {
+        errorMessage = 'Too many failed login attempts. Please try again later.';
+      } else if (error.code === 'auth/network-request-failed') {
+        errorMessage = 'Network error. Please check your internet connection.';
       }
-    } else {
-      setError('Invalid credentials. Use admin@mail.com / admin1234');
+      
+      setError(errorMessage);
+    } finally {
       setLoading(false);
     }
   };

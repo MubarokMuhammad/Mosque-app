@@ -21,6 +21,7 @@ import Categories from './pages/Categories';
 import Events from './pages/Events';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
+import VerifyOrganization from './pages/VerifyOrganization';
 import DummyDataImport from './components/DummyDataImport';
 
 // Create theme with enhanced transitions
@@ -179,6 +180,18 @@ function App() {
                 <Layout>
                   <AnimatedPageWrapper>
                     <Users />
+                  </AnimatedPageWrapper>
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/verify-organization"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <AnimatedPageWrapper>
+                    <VerifyOrganization />
                   </AnimatedPageWrapper>
                 </Layout>
               </ProtectedRoute>

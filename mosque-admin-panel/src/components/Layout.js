@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
   AppBar,
   Box,
@@ -33,7 +34,8 @@ import {
   AccountCircle,
   Notifications,
   Settings,
-  CloudUpload
+  CloudUpload,
+  VerifiedUser
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
@@ -149,10 +151,11 @@ const ProfileSection = styled(Box)(({ theme }) => ({
 
 const menuItems = [
   { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard', badge: null },
-  { text: 'Mosque Organizations', icon: <Business />, path: '/organizations', badge: '12' },
-  { text: 'Mosques', icon: <Mosque />, path: '/mosques', badge: '45' },
-  { text: 'Events', icon: <Event />, path: '/events', badge: 'New' },
-  { text: 'Users', icon: <People />, path: '/users', badge: '890' },
+  { text: 'Mosques', icon: <Business />, path: '/organizations', badge: null },
+  // { text: 'Mosques', icon: <Mosque />, path: '/mosques', badge: '45' },
+  { text: 'Events', icon: <Event />, path: '/events', badge: null },
+  { text: 'Users', icon: <People />, path: '/users', badge: null },
+  { text: 'Verify Organization', icon: <VerifiedUser />, path: '/verify-organization', badge: null },
   { text: 'Categories', icon: <Category />, path: '/categories', badge: null },
   { text: 'Reports', icon: <Assessment />, path: '/reports', badge: null },
 ];
@@ -161,13 +164,14 @@ const Layout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('adminUser');
+    logout();
     navigate('/');
   };
 
@@ -246,7 +250,7 @@ const Layout = ({ children }) => {
             <MenuIcon />
           </IconButton>
           
-          <Typography variant="h5" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 700 }}>
+          <Typography variant="h5" noWrap component="div" sx={{ flexGrow: 1, fontWeight: 700, color: '#fff' }}>
             Mosque Management System
           </Typography>
           
@@ -254,6 +258,7 @@ const Layout = ({ children }) => {
             <IconButton 
               color="inherit"
               sx={{
+                color: '#fff',
                 '&:hover': {
                   backgroundColor: 'rgba(255, 255, 255, 0.1)'
                 }
@@ -267,6 +272,7 @@ const Layout = ({ children }) => {
               onClick={handleLogout}
               startIcon={<Logout />}
               sx={{
+                color: '#fff',
                 borderRadius: '12px',
                 textTransform: 'none',
                 fontWeight: 600,

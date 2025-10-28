@@ -4,21 +4,21 @@ import 'package:flutter/foundation.dart';
 class FirebaseConfig {
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'REMOVED_SECRET',
-    appId: '1:185848472146:android:f6406cdea0f760bfa9f58b',
-    messagingSenderId: '185848472146',
-    projectId: 'mubarok-tester',
-    databaseURL: 'https://mubarok-tester-default-rtdb.firebaseio.com',
-    storageBucket: 'mubarok-tester.firebasestorage.app',
+    appId: '1:REMOVED_SECRET:android:6f994e1caeebba8be4f5ee',
+    messagingSenderId: 'REMOVED_SECRET',
+    projectId: 'REMOVED_SECRET',
+    databaseURL: 'https://REMOVED_SECRET-default-rtdb.firebaseio.com',
+    storageBucket: 'REMOVED_SECRET.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'REMOVED_SECRET',
-    appId: '1:185848472146:ios:d4dehejrun2cg1jl3hqgkic824nrq5sc',
-    messagingSenderId: '185848472146',
-    projectId: 'mubarok-tester',
-    databaseURL: 'https://mubarok-tester-default-rtdb.firebaseio.com',
-    storageBucket: 'mubarok-tester.firebasestorage.app',
-    iosBundleId: 'com.mubarok.tester',
+    appId: '1:REMOVED_SECRET:ios:7f74f2106ae09e93e4f5ee',
+    messagingSenderId: 'REMOVED_SECRET',
+    projectId: 'REMOVED_SECRET',
+    databaseURL: 'https://REMOVED_SECRET-default-rtdb.firebaseio.com',
+    storageBucket: 'REMOVED_SECRET.firebasestorage.app',
+    iosBundleId: 'REMOVED_SECRET',
   );
 
   static FirebaseOptions get currentPlatform {

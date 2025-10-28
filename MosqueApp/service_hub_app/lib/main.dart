@@ -34,9 +34,13 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  await Firebase.initializeApp(
-    options: FirebaseConfig.currentPlatform,
-  );
+  try {
+    await Firebase.initializeApp(
+      options: FirebaseConfig.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init error (continuing without Firebase): $e');
+  }
 
   // Initialize local/remote notifications (don't block app if it fails)
   try {
@@ -45,11 +49,11 @@ void main() async {
     debugPrint('LocalNotificationService init error: $e');
   }
 
-  runApp(const ServiceHubApp());
+  runApp(const UmmaHubApp());
 }
 
-class ServiceHubApp extends StatelessWidget {
-  const ServiceHubApp({super.key});
+class UmmaHubApp extends StatelessWidget {
+  const UmmaHubApp({super.key});
 
   @override
   Widget build(BuildContext context) {

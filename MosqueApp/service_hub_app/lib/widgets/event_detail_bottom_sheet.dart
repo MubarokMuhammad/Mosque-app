@@ -4,6 +4,7 @@ import '../config/app_config.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import 'dart:async';
 
 class EventDetailBottomSheet extends StatefulWidget {
   final String title;
@@ -39,6 +40,160 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
   bool isLiked = false;
   bool isAttending = false;
   bool _isSubmittingAttend = false;
+  
+  // Real-time data from Firebase
+  Map<String, dynamic>? _realTimeEventData;
+  String? _mosqueName;
+  String? _mosqueAddress;
+  String? _realTimeDate;
+  StreamSubscription<DocumentSnapshot>? _eventSubscription;
+  // Real-time attending count
+  int? _attendingCount;
+  StreamSubscription<QuerySnapshot>? _attendSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeRealTimeData();
+    _initializeAttendanceListener();
+    _checkAttendanceStatus();
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    _attendSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _initializeRealTimeData() {
+    if (widget.eventId != null) {
+      // Listen to real-time updates from Firebase
+      _eventSubscription = FirebaseFirestore.instance
+          .collection('mosqueapp_events')
+          .doc(widget.eventId)
+          .snapshots()
+          .listen((snapshot) {
+        if (snapshot.exists && mounted) {
+          setState(() {
+            _realTimeEventData = snapshot.data() as Map<String, dynamic>?;
+            
+            // Extract mosque information
+            final organization = _realTimeEventData?['organization'] as Map<String, dynamic>?;
+            _mosqueName = organization?['organizationName'] ?? widget.organizationName;
+            _mosqueAddress = organization?['address'];
+            
+            // Extract and format real-time date
+            final dateData = _realTimeEventData?['date'];
+            if (dateData is Timestamp) {
+              final dateTime = dateData.toDate();
+              final timeData = _realTimeEventData?['time'] as Map<String, dynamic>?;
+              if (timeData != null) {
+                final hour = timeData['hour'] ?? 0;
+                final minute = timeData['minute'] ?? 0;
+                final formattedTime = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+                _realTimeDate = '${_formatDate(dateTime)} at $formattedTime';
+              } else {
+                _realTimeDate = _formatDate(dateTime);
+              }
+            } else if (dateData is String) {
+              _realTimeDate = dateData;
+            }
+          });
+        }
+      });
+    } else {
+      // Fallback to provided data
+      _mosqueName = widget.organization?['organizationName'] ?? widget.organizationName;
+      _mosqueAddress = widget.organization?['address'];
+      _realTimeDate = widget.date;
+    }
+  }
+
+  String _formatDate(DateTime dateTime) {
+    final months = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    final days = [
+      'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'
+    ];
+    
+    final dayName = days[dateTime.weekday % 7];
+    final day = dateTime.day;
+    final month = months[dateTime.month - 1];
+    final year = dateTime.year;
+    
+    return '$dayName, $day $month $year';
+  }
+
+  void _initializeAttendanceListener() {
+    try {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('mosqueapp_events_attend')
+          .where('attendStatus', isEqualTo: true);
+
+      if (widget.eventId != null) {
+        query = query.where('event.eventId', isEqualTo: widget.eventId);
+      } else {
+        // Fallback ke judul event jika eventId tidak ada
+        query = query.where('event.title', isEqualTo: widget.title);
+      }
+
+      _attendSubscription = query.snapshots().listen((snapshot) {
+        final count = snapshot.docs.length;
+        if (mounted && _attendingCount != count) {
+          setState(() {
+            _attendingCount = count;
+          });
+        }
+      }, onError: (e) {
+        debugPrint('Attendance listener error: $e');
+      });
+    } catch (e) {
+      debugPrint('Failed to init attendance listener: $e');
+    }
+  }
+
+  Future<void> _checkAttendanceStatus() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.userModel;
+      if (user == null || user.email == null) {
+        return;
+      }
+
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('mosqueapp_events_attend')
+          .where('user.userEmail', isEqualTo: user.email);
+
+      if (widget.eventId != null) {
+        query = query.where('event.eventId', isEqualTo: widget.eventId);
+      } else {
+        // Fallback ketika eventId tidak tersedia, gunakan kecocokan judul event
+        query = query.where('event.title', isEqualTo: widget.title);
+      }
+
+      final snapshot = await query.limit(1).get();
+
+      bool newStatus = false;
+      if (snapshot.docs.isNotEmpty) {
+        final data = snapshot.docs.first.data();
+        final attendStatus = data['attendStatus'];
+        if (attendStatus is bool) {
+          newStatus = attendStatus;
+        }
+      }
+
+      if (mounted && newStatus != isAttending) {
+        setState(() {
+          isAttending = newStatus;
+        });
+      }
+    } catch (e) {
+      debugPrint('Attendance status check failed: $e');
+    }
+  }
 
   Future<void> _handleAttendTap() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -262,14 +417,73 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
 
                 const SizedBox(height: 8),
 
-                // Date
-                Text(
-                  widget.date,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
+                // Date and Location
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Real-time date
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.access_time,
+                          size: 16,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _realTimeDate ?? widget.date,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    // Mosque location
+                    if (_mosqueName != null) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: Colors.grey[600],
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _mosqueName!,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[700],
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                if (_mosqueAddress != null) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _mosqueAddress!,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
 
                 const SizedBox(height: 16),
@@ -321,7 +535,7 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${widget.attending} Attending',
+                          '${_attendingCount ?? widget.attending} Attending',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -478,6 +692,10 @@ void showEventDetailBottomSheet({
   required String imageAsset,
   int likes = 120,
   int attending = 50,
+  String? eventId,
+  Map<String, dynamic>? eventData,
+  Map<String, dynamic>? organization,
+  String? organizationName,
 }) {
   showModalBottomSheet(
     context: context,
@@ -494,6 +712,10 @@ void showEventDetailBottomSheet({
         imageAsset: imageAsset,
         likes: likes,
         attending: attending,
+        eventId: eventId,
+        eventData: eventData,
+        organization: organization,
+        organizationName: organizationName,
       ),
     ),
   );

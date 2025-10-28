@@ -1,0 +1,111 @@
+## 🕌 **Daftar Revisi & Penyesuaian Aplikasi Mosque**
+
+### **A. Masalah Umum & Perilaku Login**
+
+1. **User tidak muncul di Admin Portal.**
+
+   * Saat mencoba mencari pengguna di portal admin, data user tidak ditemukan.
+
+2. **Masalah pada proses login menggunakan Google.**
+
+   * Setelah logout dan mencoba login kembali, aplikasi langsung masuk ke akun Google yang sama tanpa memberi opsi untuk memilih akun lain.
+
+3. **Pertanyaan awal setelah login.**
+
+   * Setelah login, aplikasi menampilkan pertanyaan “Apakah Anda organisasi atau user?” — mekanisme ini akan diubah sesuai instruksi di bawah.
+
+---
+
+### **B. Perubahan Alur Registrasi & Mode Aplikasi**
+
+4. **Hapus fitur “Sign Up as Organization” dari proses pendaftaran awal.**
+
+   * Proses pendaftaran hanya tersedia melalui:
+
+     * **Email**
+     * **Social media (Google, Apple, dll)**
+
+5. **Semua pengguna awal dianggap sebagai “Regular User”.**
+
+   * Tidak ada opsi menjadi organisasi saat awal login.
+
+6. **Tambahkan opsi baru di halaman Settings:**
+
+   * Tambah tab/tombol **“Opt to Sign Up as Organization”**.
+   * Ketika pengguna menekan tombol ini:
+
+     * Mereka harus melalui **proses verifikasi**.
+     * Setelah diverifikasi oleh admin, status pengguna menjadi **User/Organization**.
+
+7. **Aplikasi memiliki dua mode:**
+
+   * **User Mode:** pengguna biasa tanpa akses organisasi.
+   * **User + Organization Mode:** pengguna yang telah diverifikasi sebagai organisasi.
+
+8. **Urutan pengerjaan:**
+
+   * Selesaikan dulu **User Mode**, kemudian lanjutkan ke **Organizer Mode** setelah revisi User Mode selesai.
+
+---
+
+### **C. Perbaikan Fitur di User Mode**
+
+9. **Filter untuk “Mosques” dan “Events” tidak berfungsi.**
+
+   * Perlu diperbaiki agar bisa memfilter sesuai area atau kategori yang relevan.
+
+10. **Data masjid yang tampil tidak sesuai lokasi pengguna.**
+
+    * Masjid yang muncul seharusnya berdasarkan area/lokasi user.
+
+11. **Halaman “My Schedule” masih statis.**
+
+    * Harus menampilkan jadwal dinamis sesuai data yang tersedia untuk user.
+
+12. **Setiap masjid harus memiliki tab menu berikut:**
+
+    * **Announcements (Pengumuman)**
+    * **Events (Kegiatan)**
+
+13. **Tambahkan ikon khusus pada event:**
+
+    * **Virtual Event:** tampilkan ikon “Virtual” (ikon dunia atau cloud).
+    * **Live Event:** tampilkan ikon “Orang” (menandakan acara langsung).
+
+14. **Tema Dark Mode tidak berfungsi.**
+
+    * Pastikan opsi dark theme bekerja di seluruh layar aplikasi.
+
+15. **Fitur “Favorite/Heart” belum terhubung ke daftar pengguna.**
+
+    * Tombol hati di atas masjid sudah ada, tapi daftar “Liked Mosques” belum muncul di halaman profil pengguna.
+
+16. **Perilaku tombol Subscribe:**
+
+    * Setelah user menekan “Subscribe”, tombol besar hilang dan **digantikan tombol lonceng kecil (bell)** di samping ikon hati.
+
+17. **Organisasi harus dapat melihat siapa saja pengguna yang sudah subscribe ke mereka.**
+
+---
+
+### **D. Revisi di Sisi Admin Panel**
+
+18. **Admin tidak dapat melihat user yang terdaftar.**
+
+    * Pastikan daftar pengguna muncul dan terhubung dengan akun mereka.
+
+19. **Hilangkan tab ganda “Mosques” di admin.**
+
+    * Cukup satu tab “Mosques” saja.
+
+20. **Ketika admin membuka salah satu masjid:**
+
+    * Harus muncul tab table di bawahnya berisi:
+
+      * **Announcements (arsip pengumuman)**
+      * **Events (arsip kegiatan)**
+
+21. **Setiap masjid harus dikaitkan dengan “User Admins”-nya.**
+
+    * Artinya, setiap masjid memiliki pengelola (user admin) yang jelas.
+

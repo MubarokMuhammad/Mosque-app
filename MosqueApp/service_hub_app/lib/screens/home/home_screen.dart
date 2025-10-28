@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart' show Location, locationFromAddress;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../config/app_config.dart';
 import '../../widgets/event_detail_bottom_sheet.dart';
@@ -41,11 +42,14 @@ class _HomeScreenState extends State<HomeScreen> {
   String _selectedState = 'State/Province';
   String _selectedCity = 'City';
   String _selectedEvent = 'Event';
+  String _selectedRadius = '10 miles';
   String _selectedContentFilter = 'All Mosques';
   String _currentLocationText = 'Detecting location...';
   bool _isLoadingLocation = false;
   bool _hasShownLocationPermission = false;
   Map<String, bool> _subscriptionStatus = {};
+  // Cache for geocoded addresses of public mosques to avoid repeated lookups
+  final Map<String, Location> _publicMosqueGeocodeCache = {};
 
   @override
   void initState() {
@@ -366,6 +370,26 @@ class _HomeScreenState extends State<HomeScreen> {
           _isLoadingLocation = false;
         });
       }
+    }
+  }
+
+  // Forward geocode a textual address and cache the result to reduce network calls
+  Future<Location?> _geocodeAddressCached(String address) async {
+    try {
+      final key = address.trim().toLowerCase();
+      if (_publicMosqueGeocodeCache.containsKey(key)) {
+        return _publicMosqueGeocodeCache[key];
+      }
+      final results = await locationFromAddress(address);
+      if (results.isNotEmpty) {
+        final loc = results.first;
+        _publicMosqueGeocodeCache[key] = loc;
+        return loc;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('Geocoding failed for "$address": $e');
+      return null;
     }
   }
 
@@ -818,12 +842,14 @@ class _HomeScreenState extends State<HomeScreen> {
                               _selectedState = 'State/Province';
                               _selectedCity = 'City';
                               _selectedEvent = 'Event';
+                              _selectedRadius = '10 miles';
                             });
                             setState(() {
                               _selectedCountry = 'Country';
                               _selectedState = 'State/Province';
                               _selectedCity = 'City';
                               _selectedEvent = 'Event';
+                              _selectedRadius = '10 miles';
                             });
                           },
                           child: Text(
@@ -844,6 +870,195 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // City Filter (Highest Priority)
+                        const Text(
+                          'City',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildBottomSheetDropdown(
+                          _selectedCity,
+                          [
+                            'City',
+                            // Major US Cities
+                            'New York City',
+                            'Los Angeles',
+                            'Chicago',
+                            'Houston',
+                            'Phoenix',
+                            'Philadelphia',
+                            'San Antonio',
+                            'San Diego',
+                            'Dallas',
+                            'San Jose',
+                            'Austin',
+                            'Jacksonville',
+                            'Fort Worth',
+                            'Columbus',
+                            'Charlotte',
+                            'San Francisco',
+                            'Indianapolis',
+                            'Seattle',
+                            'Denver',
+                            'Washington DC',
+                            'Boston',
+                            'El Paso',
+                            'Nashville',
+                            'Detroit',
+                            'Oklahoma City',
+                            'Portland',
+                            'Las Vegas',
+                            'Memphis',
+                            'Louisville',
+                            'Baltimore',
+                            'Milwaukee',
+                            'Albuquerque',
+                            'Tucson',
+                            'Fresno',
+                            'Sacramento',
+                            'Kansas City',
+                            'Mesa',
+                            'Atlanta',
+                            'Colorado Springs',
+                            'Raleigh',
+                            'Omaha',
+                            'Miami',
+                            'Long Beach',
+                            'Virginia Beach',
+                            'Oakland',
+                            'Minneapolis',
+                            'Tulsa',
+                            'Tampa',
+                            'Arlington',
+                            'New Orleans',
+                            // Major Canadian Cities
+                            'Toronto',
+                            'Montreal',
+                            'Vancouver',
+                            'Calgary',
+                            'Edmonton',
+                            'Ottawa',
+                            'Winnipeg',
+                            'Quebec City',
+                            'Hamilton',
+                            'Kitchener',
+                            'London',
+                            'Victoria',
+                            'Halifax',
+                            'Oshawa',
+                            'Windsor',
+                            'Saskatoon',
+                            'St. Catharines',
+                            'Regina',
+                            'Sherbrooke',
+                            'Kelowna',
+                            'Barrie',
+                            'Abbotsford',
+                            'Kingston',
+                            'Sudbury',
+                            'Saguenay'
+                          ],
+                          (value) {
+                            setModalState(() => _selectedCity = value!);
+                            setState(() => _selectedCity = value!);
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // State Filter
+                        const Text(
+                          'State/Province',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildBottomSheetDropdown(
+                          _selectedState,
+                          [
+                            'State/Province',
+                            // US States (alphabetical)
+                            'Alabama',
+                            'Alaska',
+                            'Arizona',
+                            'Arkansas',
+                            'California',
+                            'Colorado',
+                            'Connecticut',
+                            'Delaware',
+                            'Florida',
+                            'Georgia',
+                            'Hawaii',
+                            'Idaho',
+                            'Illinois',
+                            'Indiana',
+                            'Iowa',
+                            'Kansas',
+                            'Kentucky',
+                            'Louisiana',
+                            'Maine',
+                            'Maryland',
+                            'Massachusetts',
+                            'Michigan',
+                            'Minnesota',
+                            'Mississippi',
+                            'Missouri',
+                            'Montana',
+                            'Nebraska',
+                            'Nevada',
+                            'New Hampshire',
+                            'New Jersey',
+                            'New Mexico',
+                            'New York',
+                            'North Carolina',
+                            'North Dakota',
+                            'Ohio',
+                            'Oklahoma',
+                            'Oregon',
+                            'Pennsylvania',
+                            'Rhode Island',
+                            'South Carolina',
+                            'South Dakota',
+                            'Tennessee',
+                            'Texas',
+                            'Utah',
+                            'Vermont',
+                            'Virginia',
+                            'Washington',
+                            'West Virginia',
+                            'Wisconsin',
+                            'Wyoming',
+                            'Washington DC',
+                            // Canadian Provinces and Territories
+                            'Alberta',
+                            'British Columbia',
+                            'Manitoba',
+                            'New Brunswick',
+                            'Newfoundland and Labrador',
+                            'Northwest Territories',
+                            'Nova Scotia',
+                            'Nunavut',
+                            'Ontario',
+                            'Prince Edward Island',
+                            'Quebec',
+                            'Saskatchewan',
+                            'Yukon'
+                          ],
+                          (value) {
+                            setModalState(() => _selectedState = value!);
+                            setState(() => _selectedState = value!);
+                          },
+                        ),
+
+                        const SizedBox(height: 20),
+
                         // Country Filter
                         const Text(
                           'Country',
@@ -865,9 +1080,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
                         const SizedBox(height: 20),
 
-                        // State Filter
+                        // Search Radius Filter
                         const Text(
-                          'State/Province',
+                          'Search Radius',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -876,52 +1091,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 8),
                         _buildBottomSheetDropdown(
-                          _selectedState,
+                          _selectedRadius,
                           [
-                            'State/Province',
-                            'California',
-                            'New York',
-                            'Texas',
-                            'Florida',
-                            'Ontario',
-                            'Quebec',
-                            'British Columbia',
-                            'Alberta'
+                            '5 miles',
+                            '10 miles',
+                            '15 miles',
+                            '20 miles',
+                            '25 miles',
+                            '30 miles',
+                            '50 miles'
                           ],
                           (value) {
-                            setModalState(() => _selectedState = value!);
-                            setState(() => _selectedState = value!);
-                          },
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // City Filter
-                        const Text(
-                          'City',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black87,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildBottomSheetDropdown(
-                          _selectedCity,
-                          [
-                            'City',
-                            'Los Angeles',
-                            'New York City',
-                            'Houston',
-                            'Miami',
-                            'Toronto',
-                            'Montreal',
-                            'Vancouver',
-                            'Calgary'
-                          ],
-                          (value) {
-                            setModalState(() => _selectedCity = value!);
-                            setState(() => _selectedCity = value!);
+                            setModalState(() => _selectedRadius = value!);
+                            setState(() => _selectedRadius = value!);
                           },
                         ),
 
@@ -1101,6 +1283,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   final eventData =
                       events[index].data() as Map<String, dynamic>;
                   final eventTitle = eventData['title'] ?? 'Untitled Event';
+                  
+                  // Handle Timestamp to String conversion for date
+                  String eventDate = 'Untitled date Event';
+                  final dateData = eventData['date'];
+                  if (dateData is Timestamp) {
+                    final dateTime = dateData.toDate();
+                    final months = [
+                      'January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December'
+                    ];
+                    final days = [
+                      'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
+                    ];
+                    
+                    final dayName = days[dateTime.weekday % 7];
+                    final day = dateTime.day;
+                    final month = months[dateTime.month - 1];
+                    final year = dateTime.year;
+                    
+                    // Add time if available
+                    final timeData = eventData['time'] as Map<String, dynamic>?;
+                    if (timeData != null) {
+                      final hour = timeData['hour'] ?? 0;
+                      final minute = timeData['minute'] ?? 0;
+                      final formattedTime = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+                      eventDate = '$dayName, $day $month $year at $formattedTime';
+                    } else {
+                      eventDate = '$dayName, $day $month $year';
+                    }
+                  } else if (dateData is String) {
+                    eventDate = dateData;
+                  }
+                  
                   final organizationName = eventData['organization']
                           ?['organizationName'] ??
                       'Unknown Mosque';
@@ -1109,7 +1324,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     padding: EdgeInsets.only(
                       right: index < events.length - 1 ? 16 : 0,
                     ),
-                    child: _buildTopEventCard(eventTitle, organizationName),
+                    child: _buildTopEventCard(
+                        eventTitle, organizationName, eventDate, events[index].id, eventData),
                   );
                 },
               );
@@ -1121,7 +1337,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTopEventCard(String title, String mosque) {
+  Widget _buildTopEventCard(String title, String mosque, String date, String eventId, Map<String, dynamic> eventData) {
     // Map event titles to their corresponding SVG assets
     String getImageAsset(String eventTitle) {
       switch (eventTitle.toLowerCase()) {
@@ -1168,11 +1384,15 @@ class _HomeScreenState extends State<HomeScreen> {
         showEventDetailBottomSheet(
           context: context,
           title: title,
-          date: getEventDate(title),
+          date: date,
           description: getEventDescription(title),
           imageAsset: getImageAsset(title),
           likes: 0,
           attending: 0,
+          eventId: eventId,
+          eventData: eventData,
+          organization: eventData['organization'] as Map<String, dynamic>?,
+          organizationName: mosque,
         );
       },
       child: Container(
@@ -1465,6 +1685,116 @@ class _HomeScreenState extends State<HomeScreen> {
                               mosqueName, mosqueAddress, mosqueDesc, false,
                               distance: distance);
                         }).toList(),
+                        // Public (Unregistered) mosques within 10km, greyed out with label
+                        FutureBuilder<QuerySnapshot>(
+                          future: FirebaseFirestore.instance
+                              .collection('mosqueapp_subscribe_mosques')
+                              .where('isActive', isEqualTo: true)
+                              .limit(200)
+                              .get(),
+                          builder: (context, subSnapshot) {
+                            if (subSnapshot.connectionState ==
+                                ConnectionState.waiting) {
+                              return const SizedBox.shrink();
+                            }
+                            if (subSnapshot.hasError) {
+                              return const SizedBox.shrink();
+                            }
+
+                            final subDocs = subSnapshot.data?.docs ?? [];
+                            if (subDocs.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            // Build a set of registered mosque keys to exclude (name+address)
+                            final Set<String> registeredKeys = filteredMosques
+                                .map((d) {
+                                  final dd = d.data() as Map<String, dynamic>;
+                                  final name = (dd['name'] ??
+                                          dd['organizationName'] ??
+                                          '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                                  final addr = (dd['address'] ?? '')
+                                      .toString()
+                                      .trim()
+                                      .toLowerCase();
+                                  return '$name|$addr';
+                                })
+                                .toSet();
+
+                            // Deduplicate public mosques by name+address
+                            final Map<String, Map<String, dynamic>> publicMap = {};
+                            for (final s in subDocs) {
+                              final sd = s.data() as Map<String, dynamic>;
+                              final name = (sd['mosqueName'] ?? '')
+                                  .toString()
+                                  .trim();
+                              final addr = (sd['mosqueAddress'] ?? '')
+                                  .toString()
+                                  .trim();
+                              if (name.isEmpty || addr.isEmpty) continue;
+                              final key = '${name.toLowerCase()}|${addr.toLowerCase()}';
+                              if (registeredKeys.contains(key)) continue; // exclude registered
+                              // Keep the first occurrence; prefer ones with description
+                              if (!publicMap.containsKey(key) ||
+                                  (sd['mosqueDescription'] ?? '') != '') {
+                                publicMap[key] = sd;
+                              }
+                            }
+
+                            if (publicMap.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            // Compute distance via cached geocoding and filter within 10km
+                            final List<Widget> publicCards = [];
+                            for (final entry in publicMap.entries) {
+                              final sd = entry.value;
+                              final name = sd['mosqueName']?.toString() ?? 'Unknown Mosque';
+                              final addr = sd['mosqueAddress']?.toString() ?? 'Address not available';
+                              final desc = sd['mosqueDescription']?.toString() ?? 'General Mosque';
+                              publicCards.add(FutureBuilder<Location?>(
+                                future: _geocodeAddressCached(addr),
+                                builder: (context, geoSnapshot) {
+                                  if (geoSnapshot.connectionState == ConnectionState.waiting) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  final loc = geoSnapshot.data;
+                                  if (loc == null) {
+                                    // Skip if unable to geocode (no coordinates)
+                                    return const SizedBox.shrink();
+                                  }
+                                  final dist = LocationService.instance.calculateDistance(
+                                    currentPosition.latitude,
+                                    currentPosition.longitude,
+                                    loc.latitude,
+                                    loc.longitude,
+                                  );
+                                  if (dist > 30.0) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return _buildMosqueCard(
+                                    name,
+                                    addr,
+                                    desc,
+                                    false,
+                                    distance: dist,
+                                    unregistered: true,
+                                  );
+                                },
+                              ));
+                            }
+
+                            // If there are no nearby public mosques, hide section
+                            if (publicCards.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+
+                            return Column(children: publicCards);
+                          },
+                        ),
                         const SizedBox(height: 100),
                       ],
                     );
@@ -1963,6 +2293,111 @@ class _HomeScreenState extends State<HomeScreen> {
                       mosqueName, mosqueAddress, mosqueDesc, false,
                       distance: distance);
                 }).toList(),
+                // Tambahkan masjid umum (tidak terdaftar) dalam radius 30km
+                FutureBuilder<QuerySnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('mosqueapp_subscribe_mosques')
+                      .where('isActive', isEqualTo: true)
+                      .limit(200)
+                      .get(),
+                  builder: (context, subSnapshot) {
+                    if (subSnapshot.connectionState == ConnectionState.waiting) {
+                      return const SizedBox.shrink();
+                    }
+                    if (subSnapshot.hasError) {
+                      return const SizedBox.shrink();
+                    }
+
+                    final subDocs = subSnapshot.data?.docs ?? [];
+                    if (subDocs.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    // Buat set untuk menghindari duplikasi (exclude yang sudah terdaftar)
+                    final Set<String> registeredKeys = nearbyMosques
+                        .map((d) {
+                          final dd = d.data() as Map<String, dynamic>;
+                          final name = (dd['name'] ?? dd['organizationName'] ?? '')
+                              .toString()
+                              .trim()
+                              .toLowerCase();
+                          final addr = (dd['address'] ?? '')
+                              .toString()
+                              .trim()
+                              .toLowerCase();
+                          return '$name|$addr';
+                        })
+                        .toSet();
+
+                    // Deduplikasi masjid umum berdasarkan name+address
+                    final Map<String, Map<String, dynamic>> publicMap = {};
+                    for (final s in subDocs) {
+                      final sd = s.data() as Map<String, dynamic>;
+                      final name = (sd['mosqueName'] ?? '')
+                          .toString()
+                          .trim();
+                      final addr = (sd['mosqueAddress'] ?? '')
+                          .toString()
+                          .trim();
+                      if (name.isEmpty || addr.isEmpty) continue;
+                      final key = '${name.toLowerCase()}|${addr.toLowerCase()}';
+                      if (registeredKeys.contains(key)) continue; // exclude yg sudah terdaftar
+                      if (!publicMap.containsKey(key) ||
+                          (sd['mosqueDescription'] ?? '') != '') {
+                        publicMap[key] = sd;
+                      }
+                    }
+
+                    if (publicMap.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    // Hitung jarak via geocoding (cache) dan filter radius 30km
+                    final List<Widget> publicCards = [];
+                    for (final entry in publicMap.entries) {
+                      final sd = entry.value;
+                      final name = sd['mosqueName']?.toString() ?? 'Unknown Mosque';
+                      final addr = sd['mosqueAddress']?.toString() ?? 'Address not available';
+                      final desc = sd['mosqueDescription']?.toString() ?? 'General Mosque';
+
+                      publicCards.add(FutureBuilder<Location?>(
+                        future: _geocodeAddressCached(addr),
+                        builder: (context, geoSnapshot) {
+                          if (geoSnapshot.connectionState == ConnectionState.waiting) {
+                            return const SizedBox.shrink();
+                          }
+                          final loc = geoSnapshot.data;
+                          if (loc == null) {
+                            return const SizedBox.shrink();
+                          }
+                          final dist = LocationService.instance.calculateDistance(
+                            currentPosition.latitude,
+                            currentPosition.longitude,
+                            loc.latitude,
+                            loc.longitude,
+                          );
+                          if (dist > 30.0) {
+                            return const SizedBox.shrink();
+                          }
+                          return _buildMosqueCard(
+                            name,
+                            addr,
+                            desc,
+                            false,
+                            distance: dist,
+                            unregistered: true,
+                          );
+                        },
+                      ));
+                    }
+
+                    if (publicCards.isEmpty) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return Column(children: publicCards);
+                  },
+                ),
                 const SizedBox(
                     height: 100), // Extra space for bottom navigation
               ],
@@ -1975,7 +2410,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMosqueCard(
       String name, String address, String description, bool hasNotification,
-      {double? distance}) {
+      {double? distance, bool unregistered = false}) {
     bool isSubscribed = _subscriptionStatus[name] ?? false;
 
     return GestureDetector(
@@ -1997,11 +2432,11 @@ class _HomeScreenState extends State<HomeScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: unregistered ? Colors.grey[100] : Colors.white,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withOpacity(unregistered ? 0.05 : 0.1),
               spreadRadius: 1,
               blurRadius: 8,
               offset: const Offset(0, 2),
@@ -2014,7 +2449,9 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 60,
               height: 60,
               decoration: BoxDecoration(
-                color: Color(AppConfig.primaryTealColor),
+                color: unregistered
+                    ? Colors.grey[400]
+                    : Color(AppConfig.primaryTealColor),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(
@@ -2033,14 +2470,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.black87,
+                            color:
+                                unregistered ? Colors.grey[700] : Colors.black87,
                           ),
                         ),
                       ),
-                      if (isSubscribed)
+                      if (!unregistered && isSubscribed)
                         Container(
                           padding: const EdgeInsets.all(4),
                           decoration: BoxDecoration(
@@ -2054,6 +2492,24 @@ class _HomeScreenState extends State<HomeScreen> {
                             size: 16,
                           ),
                         ),
+                      if (unregistered)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[300],
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'Belum Terdaftar',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.black54,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 4),
@@ -2061,7 +2517,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     address,
                     style: TextStyle(
                       fontSize: 14,
-                      color: Colors.grey[600],
+                      color: unregistered ? Colors.grey[600] : Colors.grey[600],
                     ),
                   ),
                   const SizedBox(height: 8),

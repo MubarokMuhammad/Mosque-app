@@ -662,7 +662,7 @@ class _PrivacyPolicyScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Privacy Policy for Mosque Service Hub',
+'Privacy Policy for UmmaHub',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -680,7 +680,7 @@ class _PrivacyPolicyScreen extends StatelessWidget {
             const SizedBox(height: 24),
             _buildSection(
               'Introduction',
-              'Welcome to Mosque Service Hub. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.',
+'Welcome to UmmaHub. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.',
             ),
             _buildSection(
               'Information We Collect',

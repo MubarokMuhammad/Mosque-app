@@ -560,9 +560,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _shareApp() async {
     try {
-      const String appName = 'Mosque Service Hub';
+const String appName = 'UmmaHub';
       const String appDescription = 'Discover and connect with mosque services in your community. Find prayer times, events, and more!';
-      const String playStoreUrl = 'https://play.google.com/store/apps/details?id=com.yourcompany.servicehubapp'; // Replace with actual Play Store URL
+const String playStoreUrl = 'https://play.google.com/store/apps/details?id=REMOVED_SECRET'; // Replace with actual Play Store URL
       const String appStoreUrl = 'https://apps.apple.com/app/idYOUR_APP_ID'; // Replace with actual App Store URL
       
       final String shareText = '''
@@ -1181,7 +1181,7 @@ class _PrivacyPolicyScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Privacy Policy for Mosque Service Hub',
+'Privacy Policy for UmmaHub',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -1200,7 +1200,7 @@ class _PrivacyPolicyScreen extends StatelessWidget {
             
             _buildSection(
               'Introduction',
-              'Welcome to Mosque Service Hub. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.',
+'Welcome to UmmaHub. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our mobile application. Please read this privacy policy carefully. If you do not agree with the terms of this privacy policy, please do not access the application.',
             ),
             
             _buildSection(
@@ -1306,7 +1306,7 @@ class _TermsOfServiceScreen extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Terms of Service for Mosque Service Hub',
+'Terms of Service for UmmaHub',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -1330,7 +1330,7 @@ class _TermsOfServiceScreen extends StatelessWidget {
             
             _buildSection(
               'Description of Service',
-              'Mosque Service Hub is a mobile application that connects users with local mosques and Islamic organizations. Our service provides:\n\n'
+'UmmaHub is a mobile application that connects users with local mosques and Islamic organizations. Our service provides:\n\n'
               '• Event listings and announcements from local mosques\n'
               '• Prayer time notifications and Qibla direction\n'
               '• Community engagement features\n'
@@ -1375,7 +1375,7 @@ class _TermsOfServiceScreen extends StatelessWidget {
             
             _buildSection(
               'Intellectual Property Rights',
-              'The Service and its original content, features, and functionality are and will remain the exclusive property of Mosque Service Hub and its licensors. The Service is protected by copyright, trademark, and other laws. Our trademarks and trade dress may not be used in connection with any product or service without our prior written consent.',
+'The Service and its original content, features, and functionality are and will remain the exclusive property of UmmaHub and its licensors. The Service is protected by copyright, trademark, and other laws. Our trademarks and trade dress may not be used in connection with any product or service without our prior written consent.',
             ),
             
             _buildSection(
@@ -1392,7 +1392,7 @@ class _TermsOfServiceScreen extends StatelessWidget {
             
             _buildSection(
               'Limitation of Liability',
-              'In no event shall Mosque Service Hub, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your use of the Service.',
+'In no event shall UmmaHub, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential, or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from your use of the Service.',
             ),
             
             _buildSection(

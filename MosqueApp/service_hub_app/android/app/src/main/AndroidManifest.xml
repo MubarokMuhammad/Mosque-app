@@ -7,13 +7,13 @@
     <uses-permission android:name="com.google.android.c2dm.permission.RECEIVE" />
 
     <application
-        android:label="service_hub_app"
+        android:label="UmmaHub"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <!-- Default notification channel for Firebase Messaging -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="service_hub_channel" />
+            android:value="ummahub_channel" />
 
         <activity
             android:name=".MainActivity"

@@ -8,13 +8,12 @@ import { getAuth } from "firebase/auth";
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "REMOVED_SECRET",
-  authDomain: "mubarok-tester.firebaseapp.com",
-  databaseURL: "https://mubarok-tester-default-rtdb.firebaseio.com",
-  projectId: "mubarok-tester",
-  storageBucket: "mubarok-tester.firebasestorage.app",
-  messagingSenderId: "185848472146",
-  appId: "1:185848472146:web:a3913a5c05141021a9f58b",
-  measurementId: "G-JJ7BKXT5NQ"
+  authDomain: "REMOVED_SECRET.firebaseapp.com",
+  projectId: "REMOVED_SECRET",
+  storageBucket: "REMOVED_SECRET.firebasestorage.app",
+  messagingSenderId: "REMOVED_SECRET",
+  appId: "1:REMOVED_SECRET:web:8cc05a667d5246d4e4f5ee",
+  measurementId: "G-8FHB5WTGDZ"
 };
 
 // Initialize Firebase

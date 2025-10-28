@@ -137,7 +137,7 @@ class LocalNotificationService {
   }) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'service_hub_channel',
+      'ummahub_channel',
       'UmmaHub Notifications',
       channelDescription: 'Notifications for UmmaHub app',
       importance: Importance.max,
@@ -202,7 +202,7 @@ class LocalNotificationService {
   }) async {
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-      'service_hub_reminders',
+      'ummahub_reminders',
       'Event Reminders',
       channelDescription: 'Reminders for upcoming events',
       importance: Importance.max,
