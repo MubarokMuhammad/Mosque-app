@@ -4,6 +4,9 @@ import '../config/app_config.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../screens/mosques/mosque_detail_screen.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io' as io;
 import 'dart:async';
 
 class EventDetailBottomSheet extends StatefulWidget {
@@ -17,6 +20,7 @@ class EventDetailBottomSheet extends StatefulWidget {
   final Map<String, dynamic>? eventData;
   final Map<String, dynamic>? organization;
   final String? organizationName;
+  final BuildContext parentContext;
 
   const EventDetailBottomSheet({
     super.key,
@@ -30,6 +34,7 @@ class EventDetailBottomSheet extends StatefulWidget {
     this.eventData,
     this.organization,
     this.organizationName,
+    required this.parentContext,
   });
 
   @override
@@ -40,7 +45,8 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
   bool isLiked = false;
   bool isAttending = false;
   bool _isSubmittingAttend = false;
-  
+  bool _isSubmittingLike = false;
+
   // Real-time data from Firebase
   Map<String, dynamic>? _realTimeEventData;
   String? _mosqueName;
@@ -50,6 +56,11 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
   // Real-time attending count
   int? _attendingCount;
   StreamSubscription<QuerySnapshot>? _attendSubscription;
+  double? _mosqueLat;
+  double? _mosqueLng;
+  // Real-time likes count
+  int? _likesCount;
+  StreamSubscription<QuerySnapshot>? _likeSubscription;
 
   @override
   void initState() {
@@ -57,12 +68,15 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
     _initializeRealTimeData();
     _initializeAttendanceListener();
     _checkAttendanceStatus();
+    _initializeLikeListener();
+    _checkLikeStatus();
   }
 
   @override
   void dispose() {
     _eventSubscription?.cancel();
     _attendSubscription?.cancel();
+    _likeSubscription?.cancel();
     super.dispose();
   }
 
@@ -77,21 +91,27 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
         if (snapshot.exists && mounted) {
           setState(() {
             _realTimeEventData = snapshot.data() as Map<String, dynamic>?;
-            
+
             // Extract mosque information
-            final organization = _realTimeEventData?['organization'] as Map<String, dynamic>?;
-            _mosqueName = organization?['organizationName'] ?? widget.organizationName;
+            final organization =
+                _realTimeEventData?['organization'] as Map<String, dynamic>?;
+            _mosqueName =
+                organization?['organizationName'] ?? widget.organizationName;
             _mosqueAddress = organization?['address'];
-            
+            _mosqueLat = _parseDouble(organization?['latitude']);
+            _mosqueLng = _parseDouble(organization?['longitude']);
+
             // Extract and format real-time date
             final dateData = _realTimeEventData?['date'];
             if (dateData is Timestamp) {
               final dateTime = dateData.toDate();
-              final timeData = _realTimeEventData?['time'] as Map<String, dynamic>?;
+              final timeData =
+                  _realTimeEventData?['time'] as Map<String, dynamic>?;
               if (timeData != null) {
                 final hour = timeData['hour'] ?? 0;
                 final minute = timeData['minute'] ?? 0;
-                final formattedTime = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+                final formattedTime =
+                    '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
                 _realTimeDate = '${_formatDate(dateTime)} at $formattedTime';
               } else {
                 _realTimeDate = _formatDate(dateTime);
@@ -104,26 +124,45 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
       });
     } else {
       // Fallback to provided data
-      _mosqueName = widget.organization?['organizationName'] ?? widget.organizationName;
+      _mosqueName =
+          widget.organization?['organizationName'] ?? widget.organizationName;
       _mosqueAddress = widget.organization?['address'];
+      _mosqueLat = _parseDouble(widget.organization?['latitude']);
+      _mosqueLng = _parseDouble(widget.organization?['longitude']);
       _realTimeDate = widget.date;
     }
   }
 
   String _formatDate(DateTime dateTime) {
     final months = [
-      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December'
     ];
     final days = [
-      'Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'
+      'Sunday',
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday'
     ];
-    
+
     final dayName = days[dateTime.weekday % 7];
     final day = dateTime.day;
     final month = months[dateTime.month - 1];
     final year = dateTime.year;
-    
+
     return '$dayName, $day $month $year';
   }
 
@@ -152,6 +191,33 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
       });
     } catch (e) {
       debugPrint('Failed to init attendance listener: $e');
+    }
+  }
+
+  void _initializeLikeListener() {
+    try {
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('mosqueapp_likes_mosques')
+          .where('likeStatus', isEqualTo: true);
+
+      if (widget.eventId != null) {
+        query = query.where('event.eventId', isEqualTo: widget.eventId);
+      } else {
+        query = query.where('event.title', isEqualTo: widget.title);
+      }
+
+      _likeSubscription = query.snapshots().listen((snapshot) {
+        final count = snapshot.docs.length;
+        if (mounted && _likesCount != count) {
+          setState(() {
+            _likesCount = count;
+          });
+        }
+      }, onError: (e) {
+        debugPrint('Likes listener error: $e');
+      });
+    } catch (e) {
+      debugPrint('Failed to init likes listener: $e');
     }
   }
 
@@ -192,6 +258,45 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
       }
     } catch (e) {
       debugPrint('Attendance status check failed: $e');
+    }
+  }
+
+  Future<void> _checkLikeStatus() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.userModel;
+      if (user == null || user.email == null) {
+        return;
+      }
+
+      Query<Map<String, dynamic>> query = FirebaseFirestore.instance
+          .collection('mosqueapp_likes_mosques')
+          .where('user.userEmail', isEqualTo: user.email);
+
+      if (widget.eventId != null) {
+        query = query.where('event.eventId', isEqualTo: widget.eventId);
+      } else {
+        query = query.where('event.title', isEqualTo: widget.title);
+      }
+
+      final snapshot = await query.limit(1).get();
+
+      bool newStatus = false;
+      if (snapshot.docs.isNotEmpty) {
+        final data = snapshot.docs.first.data();
+        final likeStatus = data['likeStatus'];
+        if (likeStatus is bool) {
+          newStatus = likeStatus;
+        }
+      }
+
+      if (mounted && newStatus != isLiked) {
+        setState(() {
+          isLiked = newStatus;
+        });
+      }
+    } catch (e) {
+      debugPrint('Like status check failed: $e');
     }
   }
 
@@ -240,7 +345,8 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
         },
         'organization': {
           'organizationId': org?['organizationId'],
-          'organizationName': org?['organizationName'] ?? widget.organizationName,
+          'organizationName':
+              org?['organizationName'] ?? widget.organizationName,
           'address': org?['address'],
           'latitude': org?['latitude'],
           'longitude': org?['longitude'],
@@ -275,6 +381,134 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
       if (mounted) {
         setState(() {
           _isSubmittingAttend = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleLikeTap() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.userModel;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to like this event.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSubmittingLike = true;
+    });
+
+    try {
+      Map<String, dynamic>? org = widget.organization;
+      if (org == null && widget.eventData != null) {
+        final o = widget.eventData!['organization'];
+        if (o is Map<String, dynamic>) {
+          org = o;
+        }
+      }
+
+      final safeTitle = widget.title.replaceAll(' ', '_').toLowerCase();
+      final docId = '${user.id}_${widget.eventId ?? safeTitle}';
+
+      final likeData = {
+        'user': {
+          'userId': user.id,
+          'userName': user.name,
+          'userEmail': user.email,
+          'userPhone': user.phone,
+          'userType': user.userType.toString().split('.').last,
+          'profileImageUrl': user.profileImageUrl,
+          'location': user.location,
+        },
+        'event': {
+          'eventId': widget.eventId,
+          'title': widget.title,
+          'date': widget.date,
+          'description': widget.description,
+          'imageAsset': widget.imageAsset,
+        },
+        'organization': {
+          'organizationId': org?['organizationId'],
+          'organizationName': org?['organizationName'] ?? widget.organizationName,
+          'address': org?['address'],
+          'latitude': org?['latitude'],
+          'longitude': org?['longitude'],
+          'verificationStatus': org?['verificationStatus'],
+        },
+        'likeStatus': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_likes_mosques')
+          .doc(docId)
+          .set(likeData, SetOptions(merge: true));
+
+      setState(() {
+        isLiked = true;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Thanks! You liked this announcement.'),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save like: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingLike = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleUnlikeTap() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.userModel;
+    if (user == null) {
+      return;
+    }
+
+    setState(() {
+      _isSubmittingLike = true;
+    });
+
+    final safeTitle = widget.title.replaceAll(' ', '_').toLowerCase();
+    final docId = '${user.id}_${widget.eventId ?? safeTitle}';
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_likes_mosques')
+          .doc(docId)
+          .set({
+        'likeStatus': false,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      setState(() {
+        isLiked = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Like removed.')),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update like: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingLike = false;
         });
       }
     }
@@ -442,9 +676,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                         ),
                       ],
                     ),
-                    
+
                     const SizedBox(height: 8),
-                    
+
                     // Mosque location
                     if (_mosqueName != null) ...[
                       Row(
@@ -459,21 +693,41 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  _mosqueName!,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[700],
-                                    fontWeight: FontWeight.w600,
+                                GestureDetector(
+                                  onTap: () {
+                                    // Dismiss bottom sheet first
+                                    Navigator.pop(context);
+                                    // Then navigate to mosque profile using parent context
+                                    Future.microtask(() {
+                                      Navigator.push(
+                                        widget.parentContext,
+                                        MaterialPageRoute(
+                                          builder: (_) => MosqueDetailScreen(
+                                            mosqueName: _mosqueName!,
+                                            mosqueAddress: _mosqueAddress ??
+                                                'Unknown Address',
+                                            mosqueDescription: null,
+                                          ),
+                                        ),
+                                      );
+                                    });
+                                  },
+                                  child: Text(
+                                    _mosqueName!,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[700],
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                 ),
                                 if (_mosqueAddress != null) ...[
                                   const SizedBox(height: 2),
-                                  Text(
-                                    _mosqueAddress!,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey[500],
+                                  GestureDetector(
+                                    onTap: _showMapsOptionsBottomSheet,
+                                    child: Text(
+                                      _mosqueAddress!,
+                                      style: TextStyle(fontSize: 12),
                                     ),
                                   ),
                                 ],
@@ -513,7 +767,7 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          '${widget.likes}',
+                          '${_likesCount ?? widget.likes}',
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey[600],
@@ -555,11 +809,15 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                     // Like Button
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            isLiked = !isLiked;
-                          });
-                        },
+                        onTap: _isSubmittingLike
+                            ? null
+                            : () async {
+                                if (isLiked) {
+                                  await _handleUnlikeTap();
+                                } else {
+                                  await _handleLikeTap();
+                                }
+                              },
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
@@ -634,8 +892,9 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
                                       height: 18,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2.2,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
-                                            Colors.white),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
@@ -681,6 +940,223 @@ class _EventDetailBottomSheetState extends State<EventDetailBottomSheet> {
       ),
     );
   }
+
+  double? _parseDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) {
+      return double.tryParse(v);
+    }
+    return null;
+  }
+
+  void _showMapsOptionsBottomSheet() {
+    final address = _mosqueAddress ?? _mosqueName ?? 'Destination';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.place, color: Color(AppConfig.primaryTealColor)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Open Directions',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                address,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _openGoogleMaps(address),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A73E8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.map),
+                          SizedBox(width: 8),
+                          Text('Open in Google Maps'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _openAppleMaps(address),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.black,
+                        side: const BorderSide(color: Colors.black12),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.navigation),
+                          SizedBox(width: 8),
+                          Text('Open in Apple Maps'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.center,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openGoogleMaps(String address) async {
+    final hasLatLng = _mosqueLat != null && _mosqueLng != null;
+    Uri primary;
+    final List<Uri> fallbacks = [];
+
+    if (io.Platform.isIOS) {
+      // iOS: Try Google Maps app, then web fallback
+      primary = hasLatLng
+          ? Uri.parse(
+              'comgooglemaps://?daddr=${_mosqueLat},${_mosqueLng}&directionsmode=driving')
+          : Uri.parse(
+              'comgooglemaps://?daddr=${Uri.encodeComponent(address)}&directionsmode=driving');
+      fallbacks.add(Uri.parse(
+          'https://www.google.com/maps/dir/?api=1&destination=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+    } else {
+      // Android: Try Google Navigation intent, then geo, then web fallbacks
+      primary = hasLatLng
+          ? Uri.parse('google.navigation:q=${_mosqueLat},${_mosqueLng}&mode=d')
+          : Uri.parse(
+              'google.navigation:q=${Uri.encodeComponent(address)}&mode=d');
+
+      if (hasLatLng) {
+        fallbacks.add(Uri.parse(
+            'geo:${_mosqueLat},${_mosqueLng}?q=${_mosqueLat},${_mosqueLng}(Destination)'));
+      } else {
+        fallbacks.add(Uri.parse('geo:0,0?q=${Uri.encodeComponent(address)}'));
+      }
+
+      fallbacks.add(Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+      fallbacks.add(Uri.parse(
+          'https://maps.google.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+    }
+
+    if (!await _tryLaunch(primary)) {
+      for (final f in fallbacks) {
+        if (await _tryLaunch(f)) return;
+      }
+    }
+  }
+
+  Future<void> _openAppleMaps(String address) async {
+    final hasLatLng = _mosqueLat != null && _mosqueLng != null;
+    Uri uri;
+    if (io.Platform.isIOS) {
+      // iOS Apple Maps app scheme
+      uri = hasLatLng
+          ? Uri.parse('maps://?daddr=${_mosqueLat},${_mosqueLng}&dirflg=d')
+          : Uri.parse('maps://?daddr=${Uri.encodeComponent(address)}&dirflg=d');
+    } else {
+      // Fallback to Apple Maps web on non‑iOS
+      uri = Uri.parse(
+          'https://maps.apple.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}');
+    }
+    if (!await _tryLaunch(uri)) {
+      final webUri = Uri.parse(
+          'https://maps.apple.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}');
+      await _tryLaunch(webUri);
+    }
+  }
+
+  Future<bool> _tryLaunch(Uri uri) async {
+    try {
+      final scheme = (uri.scheme).toLowerCase();
+      final isWeb = scheme == 'http' || scheme == 'https';
+      final isMapIntent = scheme == 'google.navigation' ||
+          scheme == 'geo' ||
+          scheme == 'comgooglemaps' ||
+          scheme == 'maps';
+
+      if (isWeb) {
+        // In-app webview with non-null WebViewConfiguration
+        final ok = await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+          webViewConfiguration:
+              const WebViewConfiguration(enableJavaScript: true),
+        );
+        if (ok) return true;
+        // Fallback to external browser
+        return await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+
+      // Non-web intents
+      final mode = isMapIntent
+          ? LaunchMode.externalNonBrowserApplication
+          : LaunchMode.externalApplication;
+      final ok = await launchUrl(uri, mode: mode);
+      if (ok) return true;
+      // Fallback to platform default
+      return await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (e) {
+      debugPrint('Launch error: $e');
+    }
+    return false;
+  }
 }
 
 // Helper function to show the bottom sheet
@@ -716,6 +1192,7 @@ void showEventDetailBottomSheet({
         eventData: eventData,
         organization: organization,
         organizationName: organizationName,
+        parentContext: context,
       ),
     ),
   );

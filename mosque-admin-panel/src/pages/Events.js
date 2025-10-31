@@ -557,7 +557,7 @@ const Events = () => {
                         <StyledChip 
                           label={event.type} 
                           size="small"
-                          className={`type-${event.type.toLowerCase()}`}
+                          className={event.type ? `type-${event.type.toLowerCase()}` : ''}
                         />
                         <Chip 
                           label={getCategoryName(event.categoryId)}

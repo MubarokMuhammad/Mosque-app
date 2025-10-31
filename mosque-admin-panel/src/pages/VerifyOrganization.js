@@ -36,12 +36,12 @@ import {
   Phone, 
   LocationOn,
   Person,
-  Description,
   Schedule
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 import { organizationVerificationService } from '../services/firebaseService';
 import SearchFilterSort from '../components/SearchFilterSort';
+import { emailService } from '../services/emailService';
 
 const StyledTableContainer = styled(TableContainer)(({ theme }) => ({
   borderRadius: '16px',
@@ -209,17 +209,67 @@ const VerifyOrganization = () => {
 
   const executeAction = async () => {
     try {
-      const { id, userId } = selectedVerification;
+      const { id, userId, contactEmail, organizationName, contactPerson } = selectedVerification;
       
       switch (actionType) {
         case 'accept':
           await organizationVerificationService.accept(id, userId);
-          showSnackbar('Organization verification accepted successfully');
+          
+          // Send acceptance email
+          if (contactEmail) {
+            try {
+              const emailResult = await emailService.sendVerificationEmail(
+                'accepted',
+                contactEmail,
+                {
+                  organizationName: organizationName || 'Your Organization',
+                  contactPerson: (selectedVerification?.userDetails?.name) || 'User'
+                }
+              );
+              
+              if (emailResult.success) {
+                showSnackbar('Organization verification accepted and notification email sent successfully');
+              } else {
+                showSnackbar('Organization verification accepted, but email notification failed to send', 'warning');
+              }
+            } catch (emailError) {
+              console.error('Error sending acceptance email:', emailError);
+              showSnackbar('Organization verification accepted, but email notification failed to send', 'warning');
+            }
+          } else {
+            showSnackbar('Organization verification accepted successfully');
+          }
           break;
+          
         case 'decline':
           await organizationVerificationService.decline(id);
-          showSnackbar('Organization verification declined');
+          
+          // Send decline email
+          if (contactEmail) {
+            try {
+              const emailResult = await emailService.sendVerificationEmail(
+                'declined',
+                contactEmail,
+                {
+                  organizationName: organizationName || 'Your Organization',
+                  contactPerson: (selectedVerification?.userDetails?.name) || 'User'
+                }
+              );
+              
+              if (emailResult.success) {
+                showSnackbar('Organization verification declined and notification email sent');
+              } else {
+                showSnackbar('Organization verification declined, but email notification failed to send', 'warning');
+              }
+            } catch (emailError) {
+              console.error('Error sending decline email:', emailError);
+              showSnackbar('Organization verification declined, but email notification failed to send', 'warning');
+            }
+          } else {
+            showSnackbar('Organization verification declined');
+          }
           break;
+          
         case 'delete':
           await organizationVerificationService.delete(id);
           showSnackbar('Organization verification deleted');

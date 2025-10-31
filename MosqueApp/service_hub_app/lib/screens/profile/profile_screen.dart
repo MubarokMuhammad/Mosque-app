@@ -841,8 +841,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               )
             : TextField(
                 controller: _addressController,
-                readOnly: true,
-                maxLines: 2,
+                maxLines: 5,
                 decoration: InputDecoration(
                   hintText: 'Auto-filled from your current location',
                   border: OutlineInputBorder(
@@ -1368,16 +1367,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                       colors: [
-                        Color(AppConfig.primaryTealColor)
-                            .withOpacity(0.05),
-                        Color(AppConfig.secondaryTealColor)
-                            .withOpacity(0.02),
+                        Color(AppConfig.primaryTealColor).withOpacity(0.05),
+                        Color(AppConfig.secondaryTealColor).withOpacity(0.02),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: Color(AppConfig.primaryTealColor)
-                          .withOpacity(0.1),
+                      color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
                       width: 1,
                     ),
                   ),

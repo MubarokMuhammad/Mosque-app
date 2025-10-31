@@ -10,6 +10,8 @@ import '../../models/announcement.dart';
 import '../../widgets/announcement_modal.dart';
 import '../announcements/announcement_event_detail_screen.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io' as io;
 
 class MosqueDetailScreen extends StatefulWidget {
   final String mosqueName;
@@ -33,6 +35,8 @@ class _MosqueDetailScreenState extends State<MosqueDetailScreen>
   bool isSubscribed = false;
   List<Announcement> announcements = [];
   TabController? _tabController;
+  double? _mosqueLat;
+  double? _mosqueLng;
 
   @override
   void initState() {
@@ -501,11 +505,11 @@ Discover more mosques and stay updated with community events through our app!
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      widget.mosqueAddress,
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey[600],
+                    GestureDetector(
+                      onTap: _showMapsOptionsBottomSheet,
+                      child: Text(
+                        widget.mosqueAddress,
+                        style: TextStyle(fontSize: 16),
                       ),
                     ),
                   ],
@@ -550,6 +554,225 @@ Discover more mosques and stay updated with community events through our app!
         ],
       ),
     );
+  }
+
+  double? _parseDouble(dynamic v) {
+    if (v == null) return null;
+    if (v is double) return v;
+    if (v is int) return v.toDouble();
+    if (v is String) {
+      return double.tryParse(v);
+    }
+    return null;
+  }
+
+  void _showMapsOptionsBottomSheet() {
+    final address = widget.mosqueAddress.isNotEmpty
+        ? widget.mosqueAddress
+        : widget.mosqueName;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: false,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          margin: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.place, color: Color(AppConfig.primaryTealColor)),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Open Directions',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                address,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => _openGoogleMaps(address),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF1A73E8),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.map),
+                          SizedBox(width: 8),
+                          Text('Open in Google Maps'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => _openAppleMaps(address),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.black,
+                        side: const BorderSide(color: Colors.black12),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.navigation),
+                          SizedBox(width: 8),
+                          Text('Open in Apple Maps'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.center,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Cancel'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openGoogleMaps(String address) async {
+    final hasLatLng = _mosqueLat != null && _mosqueLng != null;
+    Uri primary;
+    final List<Uri> fallbacks = [];
+
+    if (io.Platform.isIOS) {
+      // iOS: Try Google Maps app, then web fallback
+      primary = hasLatLng
+          ? Uri.parse(
+              'comgooglemaps://?daddr=${_mosqueLat},${_mosqueLng}&directionsmode=driving')
+          : Uri.parse(
+              'comgooglemaps://?daddr=${Uri.encodeComponent(address)}&directionsmode=driving');
+      fallbacks.add(Uri.parse(
+          'https://www.google.com/maps/dir/?api=1&destination=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+    } else {
+      // Android: Try Google Navigation intent, then geo, then web fallbacks
+      primary = hasLatLng
+          ? Uri.parse('google.navigation:q=${_mosqueLat},${_mosqueLng}&mode=d')
+          : Uri.parse(
+              'google.navigation:q=${Uri.encodeComponent(address)}&mode=d');
+
+      if (hasLatLng) {
+        fallbacks.add(Uri.parse(
+            'geo:${_mosqueLat},${_mosqueLng}?q=${_mosqueLat},${_mosqueLng}(Destination)'));
+      } else {
+        fallbacks.add(Uri.parse('geo:0,0?q=${Uri.encodeComponent(address)}'));
+      }
+
+      fallbacks.add(Uri.parse(
+          'https://www.google.com/maps/search/?api=1&query=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+      fallbacks.add(Uri.parse(
+          'https://maps.google.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}'));
+    }
+
+    if (!await _tryLaunch(primary)) {
+      for (final f in fallbacks) {
+        if (await _tryLaunch(f)) return;
+      }
+    }
+  }
+
+  Future<void> _openAppleMaps(String address) async {
+    final hasLatLng = _mosqueLat != null && _mosqueLng != null;
+    Uri uri;
+    if (io.Platform.isIOS) {
+      // iOS Apple Maps app scheme
+      uri = hasLatLng
+          ? Uri.parse('maps://?daddr=${_mosqueLat},${_mosqueLng}&dirflg=d')
+          : Uri.parse('maps://?daddr=${Uri.encodeComponent(address)}&dirflg=d');
+    } else {
+      // Fallback to Apple Maps web on non‑iOS
+      uri = Uri.parse(
+          'https://maps.apple.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}');
+    }
+    if (!await _tryLaunch(uri)) {
+      final webUri = Uri.parse(
+          'https://maps.apple.com/?daddr=${hasLatLng ? '${_mosqueLat},${_mosqueLng}' : Uri.encodeComponent(address)}');
+      await _tryLaunch(webUri);
+    }
+  }
+
+  Future<bool> _tryLaunch(Uri uri) async {
+    try {
+      final scheme = (uri.scheme).toLowerCase();
+      final isWeb = scheme == 'http' || scheme == 'https';
+      final isMapIntent = scheme == 'google.navigation' ||
+          scheme == 'geo' ||
+          scheme == 'comgooglemaps' ||
+          scheme == 'maps';
+
+      if (isWeb) {
+        // In-app webview with non-null WebViewConfiguration
+        final ok = await launchUrl(
+          uri,
+          mode: LaunchMode.inAppWebView,
+          webViewConfiguration:
+              const WebViewConfiguration(enableJavaScript: true),
+        );
+        if (ok) return true;
+        // Fallback to external browser
+        return await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+
+      // Non-web intents
+      final mode = isMapIntent
+          ? LaunchMode.externalNonBrowserApplication
+          : LaunchMode.externalApplication;
+      final ok = await launchUrl(uri, mode: mode);
+      if (ok) return true;
+      // Fallback to platform default
+      return await launchUrl(uri, mode: LaunchMode.platformDefault);
+    } catch (e) {
+      debugPrint('Launch error: $e');
+    }
+    return false;
   }
 
   Widget _buildSubscribeSection() {
@@ -1019,11 +1242,23 @@ Discover more mosques and stay updated with community events through our app!
           final data = doc.data() as Map<String, dynamic>;
           final String title = (data['title'] ?? '').toString();
           final String description = (data['description'] ?? '').toString();
-          final String fullContent = (data['content'] ?? data['fullContent'] ?? description).toString();
+          final String fullContent =
+              (data['content'] ?? data['fullContent'] ?? description)
+                  .toString();
           final String date = (data['publishedAt'] is Timestamp)
-              ? ((data['publishedAt'] as Timestamp).toDate().toLocal().toString().split(' ').first)
+              ? ((data['publishedAt'] as Timestamp)
+                  .toDate()
+                  .toLocal()
+                  .toString()
+                  .split(' ')
+                  .first)
               : (data['updatedAt'] is Timestamp)
-                  ? ((data['updatedAt'] as Timestamp).toDate().toLocal().toString().split(' ').first)
+                  ? ((data['updatedAt'] as Timestamp)
+                      .toDate()
+                      .toLocal()
+                      .toString()
+                      .split(' ')
+                      .first)
                   : (data['date'] ?? '').toString();
 
           return Announcement(
@@ -1091,7 +1326,9 @@ Discover more mosques and stay updated with community events through our app!
           final data = doc.data() as Map<String, dynamic>;
           final String title = (data['title'] ?? '').toString();
           final String description = (data['description'] ?? '').toString();
-          final String fullContent = (data['content'] ?? data['fullContent'] ?? description).toString();
+          final String fullContent =
+              (data['content'] ?? data['fullContent'] ?? description)
+                  .toString();
 
           // Determine date string from event 'date' or fallback timestamps
           String dateStr;
@@ -1141,9 +1378,12 @@ Discover more mosques and stay updated with community events through our app!
             type: AnnouncementType.event,
             color: Color(AppConfig.primaryTealColor),
             icon: Icons.event_note_rounded,
-            location: (data['location'] ?? data['organization']?['address'])?.toString(),
+            location: (data['location'] ?? data['organization']?['address'])
+                ?.toString(),
             eventTime: eventTime,
-            organizer: (data['organization']?['organizationName'] ?? data['organizationName'])?.toString(),
+            organizer: (data['organization']?['organizationName'] ??
+                    data['organizationName'])
+                ?.toString(),
             tags: (data['tags'] as List?)?.map((e) => e.toString()).toList(),
           );
         }).toList();
