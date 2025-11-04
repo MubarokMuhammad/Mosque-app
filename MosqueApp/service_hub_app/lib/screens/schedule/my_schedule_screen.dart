@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../../config/app_config.dart';
 import '../../providers/auth_provider.dart';
 
@@ -19,6 +20,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   ViewType _currentView = ViewType.day;
   EventFilter _currentFilter = EventFilter.all;
   DateTime _selectedDate = DateTime.now();
+  DateTime _currentMonth = DateTime.now();
 
   final List<Map<String, dynamic>> _prayerTimes = [
     {'name': 'Fajr', 'time': '05:30', 'icon': Icons.wb_twilight},
@@ -47,12 +49,13 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           .snapshots()
           .map((attendSnapshot) {
         List<Map<String, dynamic>> events = [];
-        
+
         for (var attendDoc in attendSnapshot.docs) {
           final attendData = attendDoc.data();
           final eventData = attendData['event'] as Map<String, dynamic>?;
-          final organizationData = attendData['organization'] as Map<String, dynamic>?;
-          
+          final organizationData =
+              attendData['organization'] as Map<String, dynamic>?;
+
           if (eventData != null) {
             // Parse date - in mosqueapp_events_attend, date is a string
             DateTime eventDate;
@@ -66,23 +69,28 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             } catch (e) {
               eventDate = DateTime.now();
             }
-            
+
             // Convert Firestore data to expected format
             events.add({
               'id': eventData['eventId'] ?? attendDoc.id,
-              'mosqueName': organizationData?['organizationName'] ?? 'Unknown Mosque',
+              'mosqueName':
+                  organizationData?['organizationName'] ?? 'Unknown Mosque',
               'event': eventData['title'] ?? 'Untitled Event',
-              'time': '${eventDate.hour.toString().padLeft(2, '0')}:${eventDate.minute.toString().padLeft(2, '0')}',
+              'time':
+                  '${eventDate.hour.toString().padLeft(2, '0')}:${eventDate.minute.toString().padLeft(2, '0')}',
               'date': eventDate,
-              'address': organizationData?['address'] ?? eventData['location'] ?? 'Address not available',
-              'isMyEvent': false, // These are community events user is attending
+              'address': organizationData?['address'] ??
+                  eventData['location'] ??
+                  'Address not available',
+              'isMyEvent':
+                  false, // These are community events user is attending
               'type': 'community_event',
               'description': eventData['description'] ?? '',
               'location': eventData['location'] ?? '',
             });
           }
         }
-        
+
         return events;
       });
     } else {
@@ -94,9 +102,10 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           .map((snapshot) {
         return snapshot.docs.map((doc) {
           final data = doc.data();
-          final organizationData = data['organization'] as Map<String, dynamic>?;
+          final organizationData =
+              data['organization'] as Map<String, dynamic>?;
           final timeData = data['time'] as Map<String, dynamic>?;
-          
+
           // Parse date - in mosqueapp_events, date is a Timestamp
           DateTime eventDate;
           try {
@@ -111,22 +120,26 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           } catch (e) {
             eventDate = DateTime.now();
           }
-          
+
           // Parse time
           String timeStr = '00:00';
           if (timeData != null) {
             final hour = timeData['hour'] ?? 0;
             final minute = timeData['minute'] ?? 0;
-            timeStr = '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+            timeStr =
+                '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
           }
-          
+
           return {
             'id': doc.id,
-            'mosqueName': organizationData?['organizationName'] ?? 'Unknown Mosque',
+            'mosqueName':
+                organizationData?['organizationName'] ?? 'Unknown Mosque',
             'event': data['title'] ?? 'Untitled Event',
             'time': timeStr,
             'date': eventDate,
-            'address': organizationData?['address'] ?? data['location'] ?? 'Address not available',
+            'address': organizationData?['address'] ??
+                data['location'] ??
+                'Address not available',
             'isMyEvent': true, // These are events created by the user
             'type': data['category'] ?? 'event',
             'description': data['description'] ?? '',
@@ -539,34 +552,78 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           eventDate.day == _selectedDate.day;
     }).toList();
 
+    final now = DateTime.now();
+    final isToday = _selectedDate.year == now.year &&
+        _selectedDate.month == now.month &&
+        _selectedDate.day == now.day;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Icon(
-              Icons.today,
-              color: Color(AppConfig.primaryTealColor),
-              size: 24,
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              'Today\'s Events',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
               ),
-            ),
-            const Spacer(),
-            Text(
-              '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[600],
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.today,
+                color: Color(AppConfig.primaryTealColor),
+                size: 24,
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isToday ? 'Today\'s Events' : 'Events',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('EEEE, MMMM d, y').format(_selectedDate),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = _selectedDate.subtract(const Duration(days: 1));
+                  });
+                },
+                icon: const Icon(Icons.chevron_left),
+                tooltip: 'Previous Day',
+              ),
+              IconButton(
+                onPressed: () {
+                  setState(() {
+                    _selectedDate = _selectedDate.add(const Duration(days: 1));
+                  });
+                },
+                icon: const Icon(Icons.chevron_right),
+                tooltip: 'Next Day',
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 16),
         if (todayEvents.isEmpty)
@@ -757,9 +814,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
   }
 
   Widget _buildMonthView(List<Map<String, dynamic>> events) {
-    final now = DateTime.now();
-    final firstDayOfMonth = DateTime(now.year, now.month, 1);
-    final lastDayOfMonth = DateTime(now.year, now.month + 1, 0);
+    final firstDayOfMonth = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final lastDayOfMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0);
     final daysInMonth = lastDayOfMonth.day;
     final firstWeekday = firstDayOfMonth.weekday;
 
@@ -774,13 +830,33 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
               size: 24,
             ),
             const SizedBox(width: 8),
-            Text(
-              'Month View - ${_getMonthName(now.month)} ${now.year}',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.black87,
+            Expanded(
+              child: Text(
+                '${_getMonthName(_currentMonth.month)} ${_currentMonth.year}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
+            ),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
+                });
+              },
+              icon: const Icon(Icons.chevron_left),
+              tooltip: 'Previous Month',
+            ),
+            IconButton(
+              onPressed: () {
+                setState(() {
+                  _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+                });
+              },
+              icon: const Icon(Icons.chevron_right),
+              tooltip: 'Next Month',
             ),
           ],
         ),
@@ -833,7 +909,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
                         }
 
                         final dayDate =
-                            DateTime(now.year, now.month, dayNumber);
+                            DateTime(_currentMonth.year, _currentMonth.month, dayNumber);
                         final dayEvents = events.where((event) {
                           final eventDate = event['date'] as DateTime;
                           return eventDate.year == dayDate.year &&
@@ -841,52 +917,77 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
                               eventDate.day == dayDate.day;
                         }).toList();
 
-                        final isToday = dayNumber == now.day;
+                        final now = DateTime.now();
+                        final isToday = dayDate.year == now.year &&
+                            dayDate.month == now.month &&
+                            dayDate.day == now.day;
+                        final isSelected = dayDate.year == _selectedDate.year &&
+                            dayDate.month == _selectedDate.month &&
+                            dayDate.day == _selectedDate.day;
+                        final hasEvents = dayEvents.isNotEmpty;
 
                         return Expanded(
-                          child: Container(
-                            height: 40,
-                            margin: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(
-                              color: isToday
-                                  ? Color(AppConfig.primaryTealColor)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: dayEvents.isNotEmpty && !isToday
-                                  ? Border.all(
-                                      color: Color(AppConfig.primaryTealColor),
-                                      width: 1)
-                                  : null,
-                            ),
-                            child: Stack(
-                              children: [
-                                Center(
-                                  child: Text(
-                                    dayNumber.toString(),
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
-                                      color: isToday
-                                          ? Colors.white
-                                          : Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                if (dayEvents.isNotEmpty && !isToday)
-                                  Positioned(
-                                    top: 2,
-                                    right: 2,
-                                    child: Container(
-                                      width: 6,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color:
-                                            Color(AppConfig.primaryTealColor),
-                                        shape: BoxShape.circle,
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedDate = dayDate;
+                                _currentView = ViewType.day;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              height: 40,
+                              margin: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: isToday
+                                    ? Color(AppConfig.primaryTealColor)
+                                    : hasEvents
+                                        ? Colors.green.withOpacity(0.15)
+                                        : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                border: isSelected && !isToday
+                                    ? Border.all(
+                                        color: Color(AppConfig.primaryTealColor),
+                                        width: 2)
+                                    : hasEvents && !isToday
+                                        ? Border.all(
+                                            color: Colors.green,
+                                            width: 1.5)
+                                        : null,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Center(
+                                    child: Text(
+                                      dayNumber.toString(),
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: hasEvents || isToday
+                                            ? FontWeight.w600
+                                            : FontWeight.w500,
+                                        color: isToday
+                                            ? Colors.white
+                                            : hasEvents
+                                                ? Colors.green.shade700
+                                                : Colors.black87,
                                       ),
                                     ),
                                   ),
-                              ],
+                                  if (hasEvents && !isToday)
+                                    Positioned(
+                                      top: 2,
+                                      right: 2,
+                                      child: Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                          color: Colors.green,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           ),
                         );
@@ -914,8 +1015,8 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
             children: events
                 .where((event) {
                   final eventDate = event['date'] as DateTime;
-                  return eventDate.year == now.year &&
-                      eventDate.month == now.month;
+                  return eventDate.year == _currentMonth.year &&
+                      eventDate.month == _currentMonth.month;
                 })
                 .map((event) => _buildEventCard(event))
                 .toList(),
@@ -942,9 +1043,12 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+      child: InkWell(
+        onTap: () => _showEventDetailBottomSheet(event),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(12),
@@ -1038,6 +1142,7 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -1062,5 +1167,759 @@ class _MyScheduleScreenState extends State<MyScheduleScreen> {
       'December'
     ];
     return months[month - 1];
+  }
+
+  void _showEventDetailBottomSheet(Map<String, dynamic> event) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EventDetailBottomSheet(
+        event: event,
+        onEventUpdated: () {
+          setState(() {}); // Refresh the list
+        },
+        onEventDeleted: () {
+          setState(() {}); // Refresh the list
+        },
+      ),
+    );
+  }
+}
+
+class _EventDetailBottomSheet extends StatefulWidget {
+  final Map<String, dynamic> event;
+  final VoidCallback onEventUpdated;
+  final VoidCallback onEventDeleted;
+
+  const _EventDetailBottomSheet({
+    required this.event,
+    required this.onEventUpdated,
+    required this.onEventDeleted,
+  });
+
+  @override
+  State<_EventDetailBottomSheet> createState() => _EventDetailBottomSheetState();
+}
+
+class _EventDetailBottomSheetState extends State<_EventDetailBottomSheet> {
+  bool _isDeleting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isMyEvent = widget.event['isMyEvent'] as bool;
+    final eventDate = widget.event['date'] as DateTime;
+    final formattedDate = DateFormat('EEEE, MMMM d, y').format(eventDate);
+
+    return DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      builder: (context, scrollController) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
+            ),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header with icon and title
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Icon(
+                              Icons.event,
+                              color: Color(AppConfig.primaryTealColor),
+                              size: 32,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.event['event'],
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                if (isMyEvent)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Color(AppConfig.primaryTealColor),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Text(
+                                      'My Event',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Event Details Card
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.grey[200]!,
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            _buildDetailRow(
+                              Icons.access_time,
+                              'Time',
+                              widget.event['time'],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDetailRow(
+                              Icons.calendar_today,
+                              'Date',
+                              formattedDate,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDetailRow(
+                              Icons.location_on,
+                              'Location',
+                              widget.event['address'],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDetailRow(
+                              Icons.business,
+                              'Mosque',
+                              widget.event['mosqueName'],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Description
+                      if (widget.event['description'] != null &&
+                          widget.event['description'].toString().isNotEmpty) ...[
+                        const Text(
+                          'Description',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.event['description'],
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: Colors.black87,
+                            height: 1.6,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+
+                      // Action Buttons (only for My Events)
+                      if (isMyEvent) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showEditEventDialog(widget.event);
+                                },
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Edit Event'),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Color(AppConfig.primaryTealColor),
+                                  side: BorderSide(
+                                    color: Color(AppConfig.primaryTealColor),
+                                    width: 2,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: _isDeleting
+                                    ? null
+                                    : () => _confirmDeleteEvent(widget.event),
+                                icon: _isDeleting
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          valueColor: AlwaysStoppedAnimation<Color>(
+                                            Colors.white,
+                                          ),
+                                        ),
+                                      )
+                                    : const Icon(Icons.delete),
+                                label: Text(_isDeleting ? 'Deleting...' : 'Delete'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            icon,
+            color: Color(AppConfig.primaryTealColor),
+            size: 20,
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Colors.black87,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _confirmDeleteEvent(Map<String, dynamic> event) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text(
+          'Delete Event',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to delete "${event['event']}"? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteEvent(event);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteEvent(Map<String, dynamic> event) async {
+    setState(() {
+      _isDeleting = true;
+    });
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_events')
+          .doc(event['id'])
+          .delete();
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Event deleted successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onEventDeleted();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error deleting event: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isDeleting = false;
+        });
+      }
+    }
+  }
+
+  void _showEditEventDialog(Map<String, dynamic> event) {
+    showDialog(
+      context: context,
+      builder: (context) => _EditEventDialog(
+        event: event,
+        onEventUpdated: widget.onEventUpdated,
+      ),
+    );
+  }
+}
+
+class _EditEventDialog extends StatefulWidget {
+  final Map<String, dynamic> event;
+  final VoidCallback onEventUpdated;
+
+  const _EditEventDialog({
+    required this.event,
+    required this.onEventUpdated,
+  });
+
+  @override
+  State<_EditEventDialog> createState() => _EditEventDialogState();
+}
+
+class _EditEventDialogState extends State<_EditEventDialog> {
+  late TextEditingController _titleController;
+  late TextEditingController _descriptionController;
+  late TextEditingController _locationController;
+  late DateTime _selectedDate;
+  late TimeOfDay _selectedTime;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.event['event']);
+    _descriptionController = TextEditingController(
+      text: widget.event['description'] ?? '',
+    );
+    _locationController = TextEditingController(
+      text: widget.event['location'] ?? widget.event['address'],
+    );
+    _selectedDate = widget.event['date'] as DateTime;
+    
+    // Parse time from string
+    final timeParts = widget.event['time'].toString().split(':');
+    _selectedTime = TimeOfDay(
+      hour: int.tryParse(timeParts[0]) ?? 0,
+      minute: int.tryParse(timeParts[1]) ?? 0,
+    );
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    _locationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Color(AppConfig.primaryTealColor).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.edit,
+                      color: Color(AppConfig.primaryTealColor),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    child: Text(
+                      'Edit Event',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Title Field
+              TextField(
+                controller: _titleController,
+                decoration: InputDecoration(
+                  labelText: 'Event Title',
+                  prefixIcon: const Icon(Icons.title),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Description Field
+              TextField(
+                controller: _descriptionController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  prefixIcon: const Icon(Icons.description),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Location Field
+              TextField(
+                controller: _locationController,
+                decoration: InputDecoration(
+                  labelText: 'Location',
+                  prefixIcon: const Icon(Icons.location_on),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Date Picker
+              InkWell(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                  );
+                  if (date != null) {
+                    setState(() {
+                      _selectedDate = date;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.calendar_today),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Date',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              DateFormat('EEEE, MMMM d, y').format(_selectedDate),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Time Picker
+              InkWell(
+                onTap: () async {
+                  final time = await showTimePicker(
+                    context: context,
+                    initialTime: _selectedTime,
+                  );
+                  if (time != null) {
+                    setState(() {
+                      _selectedTime = time;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.access_time),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Time',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _selectedTime.format(context),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _saveEvent,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Color(AppConfig.primaryTealColor),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: _isSaving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Text('Save Changes'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _saveEvent() async {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter an event title'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+    });
+
+    try {
+      // Combine date and time
+      final eventDateTime = DateTime(
+        _selectedDate.year,
+        _selectedDate.month,
+        _selectedDate.day,
+        _selectedTime.hour,
+        _selectedTime.minute,
+      );
+
+      await FirebaseFirestore.instance
+          .collection('mosqueapp_events')
+          .doc(widget.event['id'])
+          .update({
+        'title': _titleController.text.trim(),
+        'description': _descriptionController.text.trim(),
+        'location': _locationController.text.trim(),
+        'date': Timestamp.fromDate(eventDateTime),
+        'time': {
+          'hour': _selectedTime.hour,
+          'minute': _selectedTime.minute,
+        },
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Event updated successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        widget.onEventUpdated();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating event: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
+      }
+    }
   }
 }

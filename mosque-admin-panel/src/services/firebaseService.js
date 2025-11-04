@@ -313,7 +313,49 @@ export const organizationVerificationService = {
     verifyStatus: status,
     updatedAt: new Date()
   }),
-  delete: (id) => deleteDocument('mosqueapp_verify_organization', id),
+  delete: async (id) => {
+    try {
+      // Ambil dokumen verifikasi terlebih dahulu untuk mendapatkan organizationId dan userId
+      const verification = await getDocument('mosqueapp_verify_organization', id);
+
+      const orgId = verification.organizationId;
+      const userId = verification.userId 
+        || verification?.userDetails?.uid 
+        || verification?.userDetails?.id 
+        || verification?.userDetails?.userId;
+
+      // Jika ada organizationId, hapus organisasi terkait
+      if (orgId) {
+        try {
+          await organizationService.delete(orgId);
+        } catch (orgErr) {
+          console.error('Error deleting organization document:', orgErr);
+          // Lanjutkan proses meski gagal menghapus organisasi
+        }
+      }
+
+      // Kembalikan status userType menjadi 'regular' dan bersihkan organizationId pada user
+      if (userId) {
+        try {
+          await updateDocument('mosqueapp_users', userId, {
+            userType: 'regular',
+            organizationId: null,
+            updatedAt: new Date()
+          });
+        } catch (userErr) {
+          console.error('Error updating user to regular:', userErr);
+          // Lanjutkan proses meski gagal mengupdate user
+        }
+      }
+
+      // Terakhir, hapus dokumen verifikasi
+      await deleteDocument('mosqueapp_verify_organization', id);
+      return true;
+    } catch (error) {
+      console.error('Error deleting organization verification with cascading effects:', error);
+      throw error;
+    }
+  },
   
   // Accept organization verification, create organization doc, and update user type
   accept: async (id, userId) => {

@@ -28,6 +28,8 @@ import {
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { styled } from '@mui/material/styles';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const DashboardContainer = styled(Box)(({ theme }) => ({
   padding: 0,
@@ -162,36 +164,164 @@ const StatCard = ({ title, value, icon, color, gradient, delay = 0 }) => (
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
-    totalUsers: 1250,
-    totalMosques: 45,
-    totalEvents: 128,
-    totalCommunityUsers: 890
+    totalUsers: 0,
+    totalMosques: 0,
+    totalEvents: 0,
+    totalCommunityUsers: 0
   });
 
-  const monthlyEventsData = [
-    { name: 'Prayer Events', value: 45, color: '#00695c' },
-    { name: 'Educational', value: 30, color: '#00897b' },
-    { name: 'Community', value: 25, color: '#26a69a' },
-    { name: 'Charity', value: 20, color: '#4db6ac' },
-    { name: 'Others', value: 8, color: '#80cbc4' }
-  ];
+  const [events, setEvents] = useState([]);
+  const [attendCounts, setAttendCounts] = useState({});
+  const [recentEvents, setRecentEvents] = useState([]);
+  const [monthlyUsersData, setMonthlyUsersData] = useState([]);
+  const [monthlyEventsData, setMonthlyEventsData] = useState([]);
 
-  const monthlyUsersData = [
-    { month: 'Jan', users: 120, growth: 15 },
-    { month: 'Feb', users: 150, growth: 25 },
-    { month: 'Mar', users: 180, growth: 20 },
-    { month: 'Apr', users: 200, growth: 11 },
-    { month: 'May', users: 250, growth: 25 },
-    { month: 'Jun', users: 280, growth: 12 }
-  ];
+  const toDate = (value) => {
+    try {
+      if (!value) return null;
+      if (value instanceof Date) return value;
+      if (typeof value === 'string') {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+      }
+      if (value?.toDate) return value.toDate();
+      if (value?.seconds) return new Date(value.seconds * 1000);
+      return null;
+    } catch {
+      return null;
+    }
+  };
 
-  const recentEvents = [
-    { id: 1, name: 'Friday Prayer', mosque: 'Al-Ikhlas Mosque', date: '2024-01-19', attendees: 150, status: 'Completed' },
-    { id: 2, name: 'Quran Study Circle', mosque: 'Baitul Rahman', date: '2024-01-18', attendees: 45, status: 'Completed' },
-    { id: 3, name: 'Community Iftar', mosque: 'Masjid An-Nur', date: '2024-01-17', attendees: 200, status: 'Completed' },
-    { id: 4, name: 'Youth Program', mosque: 'Islamic Center', date: '2024-01-16', attendees: 80, status: 'Ongoing' },
-    { id: 5, name: 'Charity Drive', mosque: 'Al-Hidayah Mosque', date: '2024-01-15', attendees: 120, status: 'Upcoming' }
-  ];
+  const normalizeEventDate = (ev) => {
+    return (
+      toDate(ev?.eventDate) ||
+      toDate(ev?.date) ||
+      toDate(ev?.startDate) ||
+      toDate(ev?.createdAt) ||
+      new Date(0)
+    );
+  };
+
+  const computeStatus = (date) => {
+    if (!date) return 'Upcoming';
+    const now = new Date();
+    const sameDay = date.toDateString() === now.toDateString();
+    if (date < now && !sameDay) return 'Completed';
+    if (sameDay) return 'Ongoing';
+    return 'Upcoming';
+  };
+
+  const monthName = (idx) => ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][idx];
+
+  const buildMonthlyData = (docs) => {
+    const now = new Date();
+    const buckets = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      buckets.push({ key: `${d.getFullYear()}-${d.getMonth()}`, month: monthName(d.getMonth()), users: 0 });
+    }
+    docs.forEach(u => {
+      const d = toDate(u.createdAt);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const bucket = buckets.find(b => b.key === key);
+      if (bucket) bucket.users += 1;
+    });
+    // compute growth vs previous
+    return buckets.map((b, idx) => ({
+      month: b.month,
+      users: b.users,
+      growth: idx === 0 ? 0 : (b.users - buckets[idx - 1].users)
+    }));
+  };
+
+  const computeEventsDistribution = (evs) => {
+    const categories = {
+      'Prayer Events': { match: ['prayer','salat','shalat','jummah','jumat'], color: '#00695c', value: 0 },
+      'Educational': { match: ['education','study','class','quran','lecture','talim'], color: '#00897b', value: 0 },
+      'Community': { match: ['community','meeting','social','gathering'], color: '#26a69a', value: 0 },
+      'Charity': { match: ['charity','donation','fundraiser','zakat','sadaqah'], color: '#4db6ac', value: 0 },
+      'Others': { match: [], color: '#80cbc4', value: 0 }
+    };
+    evs.forEach(e => {
+      const raw = String(e.category || e.type || '').toLowerCase();
+      let placed = false;
+      Object.keys(categories).forEach(label => {
+        if (!placed && categories[label].match.some(m => raw.includes(m))) {
+          categories[label].value += 1; placed = true;
+        }
+      });
+      if (!placed) categories['Others'].value += 1;
+    });
+    return Object.entries(categories).map(([name, obj]) => ({ name, value: obj.value, color: obj.color }));
+  };
+
+  useEffect(() => {
+    // Users
+    const unsubUsers = onSnapshot(collection(db, 'mosqueapp_users'), (snap) => {
+      const users = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const communityCount = users.filter(u => {
+        const role = String(u.role || u.userRole || u.type || '').toLowerCase();
+        return role.includes('community') || role.includes('member') || u.isCommunity === true;
+      }).length;
+      setStats(prev => ({
+        ...prev,
+        totalUsers: users.length,
+        totalCommunityUsers: communityCount
+      }));
+      setMonthlyUsersData(buildMonthlyData(users));
+    });
+
+    // Organizations (assumed as mosques count per request)
+    const unsubOrgs = onSnapshot(collection(db, 'mosqueapp_organizations'), (snap) => {
+      const orgs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStats(prev => ({ ...prev, totalMosques: orgs.length }));
+    });
+
+    // Events
+    const unsubEvents = onSnapshot(query(collection(db, 'mosqueapp_events'), orderBy('createdAt', 'desc')), (snap) => {
+      const evs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStats(prev => ({ ...prev, totalEvents: evs.length }));
+      setEvents(evs);
+      setMonthlyEventsData(computeEventsDistribution(evs));
+    });
+
+    // Attendance
+    const unsubAttend = onSnapshot(collection(db, 'mosqueapp_events_attend'), (snap) => {
+      const counts = {};
+      snap.docs.forEach(d => {
+        const a = d.data();
+        const eventId = a.eventId || a.eventID || a.event?.id;
+        if (!eventId) return;
+        counts[eventId] = (counts[eventId] || 0) + 1;
+      });
+      setAttendCounts(counts);
+    });
+
+    return () => {
+      unsubUsers();
+      unsubOrgs();
+      unsubEvents();
+      unsubAttend();
+    };
+  }, []);
+
+  useEffect(() => {
+    // Build recent events list when events or attendance counts change
+    const sorted = [...events].sort((a, b) => normalizeEventDate(b) - normalizeEventDate(a));
+    const list = sorted.slice(0, 5).map(ev => {
+      const d = normalizeEventDate(ev);
+      return {
+        id: ev.id,
+        name: ev.title || ev.name || 'Event',
+        mosque: ev.mosqueName || ev.organization?.organizationName || ev.organizationName || ev.location || 'Unknown',
+        date: d ? d.toISOString().split('T')[0] : '',
+        attendees: attendCounts[ev.id] || 0,
+        status: ev.status || computeStatus(d)
+      };
+    });
+    setRecentEvents(list);
+  }, [events, attendCounts]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -386,7 +516,7 @@ const Dashboard = () => {
                   </TableRow>
                 </StyledTableHead>
                 <TableBody>
-                  {recentEvents.map((event, index) => (
+                  {recentEvents.map((event) => (
                     <StyledTableRow key={event.id}>
                       <TableCell>
                         <Typography variant="body1" fontWeight={600}>
@@ -402,7 +532,7 @@ const Dashboard = () => {
                       <TableCell>
                         <Box display="flex" alignItems="center">
                           <CalendarToday sx={{ mr: 1, color: '#666', fontSize: 16 }} />
-                          {new Date(event.date).toLocaleDateString()}
+                          {event.date ? new Date(event.date).toLocaleDateString() : ''}
                         </Box>
                       </TableCell>
                       <TableCell>
