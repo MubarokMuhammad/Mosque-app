@@ -1,14 +1,6 @@
 class AppConfig {
-  // SMTP Configuration
-  static const String smtpUsername = 'REMOVED_SECRET';
-  static const String smtpPassword = 'REMOVED_SECRET';
-  static const String smtpHost = 'REMOVED_SECRET';
+  static const String smtpHost = '';
   static const int smtpPort = 587;
-
-  // Twilio Configuration
-  static const String twilioAccountSid = 'REMOVED_SECRET';
-  static const String twilioAuthToken = 'REMOVED_SECRET';
-  static const String twilioServiceSid = 'REMOVED_SECRET';
 
   // App Theme Colors
   static const int primaryTealColor = 0xFF20B2AA; // Light Sea Green
